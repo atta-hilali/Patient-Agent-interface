@@ -2,7 +2,8 @@
 
 This UI has been split from one monolithic file into clear frontend layers:
 
-- `veldooc_patient_app.html`: Screen markup and flow structure.
+- `index.html`: Main app entrypoint and screen markup for Vercel/static hosting.
+- `veldooc_patient_app.html`: Compatibility redirect to `index.html`.
 - `styles/main.css`: CSS entry file that imports all style modules.
 - `styles/core.css`: Global tokens, reset, and shared router styles.
 - `styles/screens/*.css`: Per-screen styling (`welcome`, `ehr`, `login`, `loading`, `chat`).
