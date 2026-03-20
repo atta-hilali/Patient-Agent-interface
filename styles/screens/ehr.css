@@ -1,0 +1,181 @@
+﻿/* ── SCREEN 2: EHR PICKER
+═══════════════════════════════════════ */
+#screen-ehr {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--slate-bg);
+  padding: 24px;
+}
+
+.ehr-card {
+  background: var(--white);
+  border-radius: var(--r24);
+  padding: 40px 36px;
+  max-width: 440px;
+  width: 100%;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 8px 32px rgba(0,0,0,0.08);
+  animation: fadeUp 0.5s ease both;
+}
+.ehr-back {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 13px; color: var(--slate-soft);
+  background: none; padding: 0; margin-bottom: 28px;
+  transition: color 0.15s;
+}
+.ehr-back:hover { color: var(--slate); }
+.ehr-back svg { width: 14px; height: 14px; }
+
+.ehr-title {
+  font-family: var(--serif);
+  font-size: 26px;
+  font-weight: 400;
+  color: var(--slate);
+  margin-bottom: 6px;
+  letter-spacing: -0.02em;
+}
+.ehr-subtitle {
+  font-size: 14px;
+  color: var(--slate-soft);
+  margin-bottom: 28px;
+  line-height: 1.5;
+}
+
+.clinic-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: var(--teal-pale);
+  border: 1px solid var(--teal-mid);
+  border-radius: var(--r12);
+  padding: 12px 14px;
+  margin-bottom: 20px;
+  font-size: 13px;
+  color: var(--teal);
+  line-height: 1.5;
+}
+.clinic-hint-icon { flex-shrink: 0; margin-top: 1px; }
+
+.ehr-search {
+  position: relative;
+  margin-bottom: 16px;
+}
+.ehr-search svg {
+  position: absolute;
+  left: 13px; top: 50%;
+  transform: translateY(-50%);
+  width: 16px; height: 16px;
+  color: var(--slate-mute);
+  pointer-events: none;
+}
+.ehr-search input {
+  width: 100%;
+  background: var(--slate-bg);
+  border: 1px solid var(--slate-line);
+  border-radius: var(--r12);
+  padding: 11px 14px 11px 40px;
+  font-size: 14px;
+  color: var(--slate);
+  outline: none;
+  transition: border-color 0.2s;
+}
+.ehr-search input:focus { border-color: var(--teal-mid); }
+.ehr-search input::placeholder { color: var(--slate-mute); }
+
+.ehr-section-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--slate-mute);
+  margin-bottom: 8px;
+}
+
+.ehr-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.ehr-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: 1.5px solid var(--slate-line);
+  border-radius: var(--r12);
+  background: var(--white);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  text-align: left;
+}
+.ehr-option:hover { border-color: var(--teal-mid); background: var(--teal-pale); }
+.ehr-option.selected { border-color: var(--teal-light); background: var(--teal-pale); }
+.ehr-logo {
+  width: 38px; height: 38px;
+  border-radius: var(--r8);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700;
+  flex-shrink: 0;
+}
+.ehr-info { flex: 1; }
+.ehr-name { font-size: 14px; font-weight: 500; color: var(--slate); margin-bottom: 2px; }
+.ehr-desc { font-size: 12px; color: var(--slate-soft); }
+.ehr-check {
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  border: 1.5px solid var(--slate-line);
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s;
+}
+.ehr-option.selected .ehr-check {
+  background: var(--teal-light);
+  border-color: var(--teal-light);
+}
+.ehr-option.selected .ehr-check::after {
+  content: '';
+  width: 5px; height: 9px;
+  border: 2px solid white;
+  border-top: none; border-left: none;
+  transform: rotate(45deg) translate(-1px,-1px);
+  display: block;
+}
+
+.ehr-divider { height: 1px; background: var(--slate-line); margin: 16px 0; }
+
+.ehr-continue {
+  width: 100%;
+  padding: 15px;
+  background: var(--slate-line);
+  color: var(--slate-mute);
+  border-radius: var(--r12);
+  font-size: 15px;
+  font-weight: 600;
+  transition: all 0.2s;
+  pointer-events: none;
+}
+.ehr-continue.ready {
+  background: var(--teal-light);
+  color: var(--white);
+  pointer-events: auto;
+}
+.ehr-continue.ready:hover { background: var(--teal); }
+
+.redirect-info {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: var(--teal-pale);
+  border-radius: var(--r8);
+  font-size: 12px;
+  color: var(--teal);
+}
+.redirect-info.show { display: flex; }
+.redirect-spinner {
+  width: 14px; height: 14px;
+  border: 2px solid var(--teal-mid);
+  border-top-color: var(--teal);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+

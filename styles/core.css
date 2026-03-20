@@ -1,0 +1,48 @@
+﻿/* ═══════════════════════════════════════
+   TOKENS
+═══════════════════════════════════════ */
+:root {
+  --teal:       #0A7568;
+  --teal-light: #0D9688;
+  --teal-pale:  #E6F4F2;
+  --teal-mid:   #B2DAD6;
+  --slate:      #1E293B;
+  --slate-mid:  #334155;
+  --slate-soft: #64748B;
+  --slate-mute: #94A3B8;
+  --slate-line: #E2E8F0;
+  --slate-bg:   #F8FAFC;
+  --white:      #FFFFFF;
+  --red:        #DC2626;
+  --red-pale:   #FEF2F2;
+  --amber:      #D97706;
+  --amber-pale: #FFFBEB;
+  --green:      #059669;
+  --green-pale: #ECFDF5;
+  --serif: 'DM Serif Display', Georgia, serif;
+  --sans:  'DM Sans', sans-serif;
+  --r4: 4px; --r8: 8px; --r12: 12px; --r16: 16px; --r24: 24px; --rfull: 999px;
+}
+
+/* ═══════════════════════════════════════
+   RESET + BASE
+═══════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: var(--sans);
+  background: var(--white);
+  color: var(--slate);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+button { cursor: pointer; font-family: var(--sans); border: none; }
+input, textarea { font-family: var(--sans); }
+
+/* ═══════════════════════════════════════
+   SCREEN ROUTER
+═══════════════════════════════════════ */
+.screen { display: none; min-height: 100vh; }
+.screen.active { display: flex; }
+

@@ -1,0 +1,386 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Veldooc — Patient App</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="styles/main.css"/>
+</head>
+<body>
+<main id="app-root">
+
+<!-- ══════════════════════════════════════
+     SCREEN 1: WELCOME
+══════════════════════════════════════ -->
+<div class="screen active" id="screen-welcome">
+  <svg class="ecg-line" preserveAspectRatio="none" viewBox="0 0 1400 60">
+    <path d="M0,30 L100,30 L130,30 L145,8 L160,52 L175,8 L190,52 L205,30 L280,30 L310,30 L325,8 L340,52 L355,8 L370,52 L385,30 L460,30 L490,30 L505,8 L520,52 L535,8 L550,52 L565,30 L640,30 L670,30 L685,8 L700,52 L715,8 L730,52 L745,30 L820,30 L850,30 L865,8 L880,52 L895,8 L910,52 L925,30 L1000,30 L1030,30 L1045,8 L1060,52 L1075,8 L1090,52 L1105,30 L1180,30 L1210,30 L1225,8 L1240,52 L1255,8 L1270,52 L1285,30 L1400,30"/>
+  </svg>
+
+  <div class="welcome-inner">
+    <div class="welcome-logo">
+      <div class="logo-mark">
+        <svg viewBox="0 0 22 22" fill="none">
+          <path d="M11 3v4M11 15v4M3 11h4M15 11h4" stroke="white" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="11" cy="11" r="3.5" fill="white"/>
+        </svg>
+      </div>
+      <div class="logo-text">Veldooc</div>
+    </div>
+
+    <div class="welcome-headline">Your health record,<br><em>at your fingertips</em></div>
+    <div class="welcome-sub">Ask questions about your medications, appointments, and lab results — answered instantly from your own health record.</div>
+
+    <button class="welcome-cta" id="welcome-start-btn" type="button">Get started</button>
+    <button class="welcome-secondary" id="welcome-existing-btn" type="button">I already have an account</button>
+
+    <div class="trust-badges">
+      <div class="trust-badge"><span class="trust-dot">✦</span> HIPAA compliant</div>
+      <div class="trust-badge"><span class="trust-dot">✦</span> On-premises only</div>
+      <div class="trust-badge"><span class="trust-dot">✦</span> Grounded answers</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     SCREEN 2: EHR PICKER
+══════════════════════════════════════ -->
+<div class="screen" id="screen-ehr">
+  <div style="width:100%;display:flex;align-items:center;justify-content:center;padding:24px;min-height:100vh;background:var(--slate-bg)">
+  <div class="ehr-card">
+    <button class="ehr-back" id="ehr-back-btn" type="button">
+      <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 2L4 7l5 5"/></svg>
+      Back
+    </button>
+
+    <div class="ehr-title">Connect your health record</div>
+    <div class="ehr-subtitle">Sign in with your existing patient portal. No new account needed.</div>
+
+    <div class="clinic-hint">
+      <span class="clinic-hint-icon">🏥</span>
+      <span><strong>Riverside Endocrinology</strong> uses Epic MyChart. You can also connect a different provider.</span>
+    </div>
+
+    <div class="ehr-search">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="6.5" cy="6.5" r="4"/><path d="M10 10l3 3"/></svg>
+      <input type="text" placeholder="Search your hospital or clinic…" id="ehr-search-input" autocomplete="organization"/>
+    </div>
+
+    <div class="ehr-section-label">Suggested for your clinic</div>
+    <div class="ehr-list" id="suggested-list">
+      <button class="ehr-option" id="opt-epic" data-ehr-id="epic" type="button">
+        <div class="ehr-logo" style="background:#EFF6FF;border:1px solid #BFDBFE;color:#1D4ED8">Ep</div>
+        <div class="ehr-info">
+          <div class="ehr-name">Epic MyChart</div>
+          <div class="ehr-desc">Used by 35% of US hospitals</div>
+        </div>
+        <div class="ehr-check" id="check-epic"></div>
+      </button>
+    </div>
+
+    <div class="ehr-divider"></div>
+    <div class="ehr-section-label">Other providers</div>
+    <div class="ehr-list" id="other-list">
+      <button class="ehr-option" id="opt-cerner" data-ehr-id="cerner" type="button">
+        <div class="ehr-logo" style="background:#F0FDF4;border:1px solid #86EFAC;color:#059669">Ce</div>
+        <div class="ehr-info">
+          <div class="ehr-name">Cerner HealtheLife</div>
+          <div class="ehr-desc">Oracle Health — large health systems</div>
+        </div>
+        <div class="ehr-check" id="check-cerner"></div>
+      </button>
+      <button class="ehr-option" id="opt-veradigm" data-ehr-id="veradigm" type="button">
+        <div class="ehr-logo" style="background:#FFFBEB;border:1px solid #FDE68A;color:#D97706">Ve</div>
+        <div class="ehr-info">
+          <div class="ehr-name">Veradigm</div>
+          <div class="ehr-desc">Independent physician practices</div>
+        </div>
+        <div class="ehr-check" id="check-veradigm"></div>
+      </button>
+      <button class="ehr-option" id="opt-athena" data-ehr-id="athena" type="button">
+        <div class="ehr-logo" style="background:#F5F3FF;border:1px solid #DDD6FE;color:#7C3AED">At</div>
+        <div class="ehr-info">
+          <div class="ehr-name">athenahealth</div>
+          <div class="ehr-desc">Ambulatory &amp; specialty clinics</div>
+        </div>
+        <div class="ehr-check" id="check-athena"></div>
+      </button>
+    </div>
+
+    <div class="redirect-info" id="redirect-info">
+      <div class="redirect-spinner"></div>
+      <span id="redirect-text">Redirecting to Epic MyChart…</span>
+    </div>
+
+    <button class="ehr-continue" id="ehr-continue-btn" type="button" style="margin-top:16px">
+      Continue with Epic MyChart
+    </button>
+  </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     SCREEN 3: EPIC LOGIN
+══════════════════════════════════════ -->
+<div class="screen" id="screen-login">
+  <div style="width:100%;display:flex;align-items:center;justify-content:center;padding:24px;min-height:100vh;background:var(--slate-bg)">
+  <div class="login-card">
+    <div class="login-epic-badge">
+      <div class="login-epic-logo">Ep</div>
+      <div>
+        <div style="font-weight:600">Epic MyChart</div>
+        <div style="opacity:.7;font-size:11px">Secure sign-in · mychart.epic.com</div>
+      </div>
+    </div>
+
+    <div id="login-step-credentials">
+      <div class="login-title">Sign in to MyChart</div>
+      <div class="login-sub">Veldooc is requesting read access to your health record.</div>
+
+      <div class="form-field">
+        <label>Username</label>
+        <input type="text" placeholder="MyChart username" autocomplete="username"/>
+      </div>
+      <div class="form-field">
+        <label>Password</label>
+        <input type="password" placeholder="Password" autocomplete="current-password"/>
+      </div>
+
+      <button class="login-btn" id="login-signin-btn" type="button">Sign in</button>
+
+      <div class="login-security-note">
+        Your credentials are sent directly to Epic's servers.<br>Veldooc never sees your password.
+      </div>
+    </div>
+
+    <div id="login-step-mfa" style="display:none">
+      <div class="login-title">Two-step verification</div>
+      <div class="login-sub">Enter the 6-digit code sent to (•••) •••-4821</div>
+
+      <div class="mfa-row">
+        <div class="mfa-box filled">4</div>
+        <div class="mfa-box filled">7</div>
+        <div class="mfa-box filled">2</div>
+        <div class="mfa-box filled">9</div>
+        <div class="mfa-box filled">1</div>
+        <div class="mfa-box filled">3</div>
+      </div>
+      <div style="font-size:12px;color:var(--green);text-align:center;margin-bottom:16px;font-weight:500">Code accepted ✓</div>
+
+      <button class="login-btn" id="login-verify-btn" type="button">Verify &amp; continue</button>
+    </div>
+
+    <div id="login-step-consent" style="display:none">
+      <div class="login-title">Allow Veldooc access?</div>
+      <div class="login-sub" style="margin-bottom:16px">Veldooc is requesting read-only access to:</div>
+
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:20px">
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--slate)">
+          <span style="color:var(--green);font-size:14px">✓</span>Medications &amp; prescriptions
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--slate)">
+          <span style="color:var(--green);font-size:14px">✓</span>Diagnoses &amp; conditions
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--slate)">
+          <span style="color:var(--green);font-size:14px">✓</span>Lab results &amp; reports
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--slate)">
+          <span style="color:var(--green);font-size:14px">✓</span>Appointments
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--slate)">
+          <span style="color:var(--green);font-size:14px">✓</span>Allergies &amp; reactions
+        </div>
+      </div>
+      <div style="font-size:12px;color:var(--slate-soft);margin-bottom:16px;padding:10px;background:var(--slate-bg);border-radius:var(--r8)">
+        Veldooc cannot write to your record or share your data with third parties.
+      </div>
+      <button class="login-btn" id="login-allow-btn" type="button" style="background:var(--teal-light)">Allow access</button>
+      <button id="login-deny-btn" type="button" style="width:100%;padding:12px;background:none;border:none;color:var(--slate-soft);font-size:13px;margin-top:8px">Deny</button>
+    </div>
+  </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     SCREEN 4: LOADING
+══════════════════════════════════════ -->
+<div class="screen" id="screen-loading">
+  <div class="loading-inner" style="margin:auto">
+    <div class="loading-pulse">
+      <svg class="loading-icon" viewBox="0 0 32 32" fill="none">
+        <path d="M16 6v6M16 20v6M6 16h6M20 16h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        <circle cx="16" cy="16" r="4" fill="currentColor"/>
+      </svg>
+    </div>
+    <div class="loading-title">Loading your record</div>
+    <div class="loading-sub">Fetching your health data from Epic MyChart</div>
+
+    <div class="fhir-items" id="fhir-items">
+      <div class="fhir-row done">
+        <div class="fhir-icon" style="background:#EFF6FF;color:#1D4ED8">Rx</div>
+        <div class="fhir-row-name">Medications</div>
+        <div class="fhir-row-status">6 loaded ✓</div>
+      </div>
+      <div class="fhir-row done">
+        <div class="fhir-icon" style="background:#F0FDF4;color:#059669">Dx</div>
+        <div class="fhir-row-name">Diagnoses</div>
+        <div class="fhir-row-status">3 loaded ✓</div>
+      </div>
+      <div class="fhir-row done">
+        <div class="fhir-icon" style="background:#FFFBEB;color:#D97706">Lab</div>
+        <div class="fhir-row-name">Lab results</div>
+        <div class="fhir-row-status">12 loaded ✓</div>
+      </div>
+      <div class="fhir-row loading">
+        <div class="fhir-icon" style="background:var(--teal-pale);color:var(--teal)">Cal</div>
+        <div class="fhir-row-name">Appointments</div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <div class="fhir-row-spinner"></div>
+          <span class="fhir-row-status">fetching</span>
+        </div>
+      </div>
+      <div class="fhir-row loading">
+        <div class="fhir-icon" style="background:var(--red-pale);color:var(--red)">Alg</div>
+        <div class="fhir-row-name">Allergies</div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <div class="fhir-row-spinner"></div>
+          <span class="fhir-row-status">fetching</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     SCREEN 5: CHAT
+══════════════════════════════════════ -->
+<div class="screen" id="screen-chat">
+
+  <div class="chat-header">
+    <div class="chat-logo">
+      <svg viewBox="0 0 18 18" fill="none">
+        <path d="M9 2.5v3M9 12.5v3M2.5 9h3M12.5 9h3" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+        <circle cx="9" cy="9" r="2.5" fill="white"/>
+      </svg>
+    </div>
+    <div class="chat-header-info">
+      <div class="chat-header-name">Veldooc</div>
+      <div class="chat-header-sub">
+        <div class="online-dot"></div>
+        Ready · Sarah's record loaded
+      </div>
+    </div>
+    <div class="chat-timer" id="chat-timer">28:41</div>
+    <div class="chat-header-actions">
+      <button class="hdr-btn" id="chat-record-btn" type="button" title="Health record" aria-label="Toggle health record summary">
+        <svg viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><rect x="2" y="1" width="11" height="13" rx="2"/><path d="M5 5h5M5 8h5M5 11h3"/></svg>
+      </button>
+      <button class="hdr-btn" id="chat-more-btn" type="button" title="More" aria-label="More actions">
+        <svg viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="7.5" cy="3" r="1"/><circle cx="7.5" cy="7.5" r="1"/><circle cx="7.5" cy="12" r="1"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Context chips -->
+  <div class="context-strip" id="chat-context-strip">
+    <div class="ctx-chip"><span class="ctx-chip-dot" style="background:var(--green)"></span>6 meds</div>
+    <div class="ctx-chip"><span class="ctx-chip-dot" style="background:#1D4ED8"></span>3 conditions</div>
+    <div class="ctx-chip"><span class="ctx-chip-dot" style="background:var(--amber)"></span>Mar 22 appt</div>
+    <div class="ctx-chip"><span class="ctx-chip-dot" style="background:#7C3AED"></span>12 labs</div>
+    <div class="ctx-chip alert"><span class="ctx-chip-dot" style="background:var(--red)"></span>Allergy: Penicillin</div>
+    <div class="ctx-chip"><span class="ctx-chip-dot" style="background:var(--teal)"></span>1 care plan</div>
+  </div>
+
+  <div class="messages-area" id="messages">
+
+    <div class="date-divider">Today, 9:41 am</div>
+
+    <!-- Agent greeting -->
+    <div class="msg-group agent">
+      <div class="msg-sender">Veldooc</div>
+      <div class="bubble agent">
+        Hi Sarah! I've loaded your health record from Epic MyChart. I can see your <strong>6 current medications</strong>, upcoming <strong>Endocrinology appointment on March 22nd</strong>, and <strong>12 recent lab results</strong>.
+        <br/><br/>What would you like to know today?
+      </div>
+      <div class="quick-replies">
+        <button class="quick-reply" type="button">What are my current meds?</button>
+        <button class="quick-reply" type="button">Explain my HbA1c</button>
+        <button class="quick-reply" type="button">Appointment prep?</button>
+      </div>
+      <div class="msg-source"><span class="msg-source-icon">⊙</span> Source: your FHIR record</div>
+    </div>
+
+    <!-- Patient question -->
+    <div class="msg-group patient">
+      <div class="bubble patient">What is Metformin for and should I take it with food?</div>
+    </div>
+
+    <!-- Agent answer with citations -->
+    <div class="msg-group agent">
+      <div class="msg-sender">Veldooc</div>
+      <div class="bubble agent">
+        Your Metformin <span class="cite">MED-1</span> (1000mg twice daily) is prescribed to manage your Type 2 Diabetes <span class="cite">DX-1</span> by helping lower blood sugar levels.
+        <br/><br/>
+        Yes — always take it <strong>with meals</strong>. Your care plan <span class="cite">CP-1</span> specifically notes breakfast and dinner, which also helps reduce the most common side effect: stomach upset.
+      </div>
+      <div class="msg-source"><span class="msg-source-icon">⊙</span> MedicationRequest · Condition · CarePlan · FDA label</div>
+    </div>
+
+    <!-- Patient follow-up -->
+    <div class="msg-group patient">
+      <div class="bubble patient">When is my next appointment and what do I need to bring?</div>
+    </div>
+
+  </div>
+
+  <!-- Input area -->
+  <div class="input-area">
+    <div class="input-modes">
+      <button class="mode-btn active" type="button" data-mode="text">
+        <svg viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 10h9M2 7h6M2 4h9"/></svg>
+        Text
+      </button>
+      <button class="mode-btn" type="button" data-mode="voice">
+        <svg viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6.5 1.5a2 2 0 0 1 2 2v3a2 2 0 0 1-4 0v-3a2 2 0 0 1 2-2z"/><path d="M10 7a3.5 3.5 0 0 1-7 0M6.5 10.5v2"/></svg>
+        Voice
+      </button>
+      <button class="mode-btn" type="button" data-mode="image">
+        <svg viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="1.5" y="2" width="10" height="9" rx="1.5"/><circle cx="4.5" cy="5" r="1"/><path d="M1.5 9.5l3-3 2 2 2-2.5 2.5 3"/></svg>
+        Image
+      </button>
+    </div>
+    <div class="input-box">
+      <textarea id="chat-input" placeholder="Ask about your medications, appointments, labs…" rows="1" aria-label="Message input"></textarea>
+      <div class="input-actions">
+        <input id="chat-image-input" type="file" accept="image/*" hidden/>
+        <button class="img-btn" id="chat-image-btn" type="button" title="Upload image" aria-label="Upload image">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><rect x="1.5" y="2.5" width="13" height="11" rx="2"/><circle cx="5.5" cy="6.5" r="1.2"/><path d="M1.5 11l4-4 2.5 2.5 2-2.5 4 4"/></svg>
+        </button>
+        <button class="mic-btn" id="chat-mic-btn" type="button" title="Voice input" aria-label="Voice input">
+          <svg viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M7.5 2a2.5 2.5 0 0 1 2.5 2.5v4a2.5 2.5 0 0 1-5 0v-4A2.5 2.5 0 0 1 7.5 2z"/><path d="M12 8a4.5 4.5 0 0 1-9 0M7.5 12.5v2"/></svg>
+        </button>
+        <button class="send-btn" id="chat-send-btn" type="button" title="Send message" aria-label="Send message">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8l12-6-6 12-1.5-5.5L2 8z"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="input-footer">
+      <span>On-premises · encrypted · </span><a href="#" id="chat-privacy-link">privacy policy</a>
+    </div>
+  </div>
+  <div class="chat-toast" id="chat-toast" role="status" aria-live="polite"></div>
+
+</div>
+</main>
+
+<script src="js/navigation.js"></script>
+<script src="js/ehr-flow.js"></script>
+<script src="js/login-flow.js"></script>
+<script src="js/loading-flow.js"></script>
+<script src="js/session-timer.js"></script>
+<script src="js/chat-flow.js"></script>
+<script src="js/app-init.js"></script>
+</body>
+</html>
