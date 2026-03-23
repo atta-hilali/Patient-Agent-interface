@@ -402,3 +402,29 @@
   transform: translateX(-50%) translateY(0);
 }
 
+.epic-debug {
+  margin: 0 16px 8px;
+  border: 1px solid var(--slate-line);
+  border-radius: var(--r12);
+  background: var(--slate-bg);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.epic-debug summary {
+  cursor: pointer;
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--slate-soft);
+}
+.epic-debug pre {
+  margin: 0;
+  padding: 12px;
+  max-height: 220px;
+  overflow: auto;
+  font-size: 11px;
+  border-top: 1px solid var(--slate-line);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+

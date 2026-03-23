@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Epic OAuth Callback - Veldooc</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --card: #111827;
+    --line: #334155;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --accent: #22c55e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    background: radial-gradient(circle at 20% 20%, #1e293b 0%, var(--bg) 45%);
+    color: var(--text);
+    font-family: "DM Sans", Arial, sans-serif;
+    padding: 20px;
+  }
+  .card {
+    width: min(960px, 100%);
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 20px;
+  }
+  h1 {
+    margin: 0 0 8px;
+    font-size: 24px;
+  }
+  p {
+    margin: 0 0 12px;
+    color: var(--muted);
+  }
+  #callback-status {
+    color: var(--accent);
+    margin: 10px 0 16px;
+    font-weight: 600;
+  }
+  pre {
+    margin: 0;
+    background: #020617;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px;
+    overflow: auto;
+    max-height: 55vh;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+  <main class="card">
+    <h1>Epic OAuth Callback</h1>
+    <p>Validating auth response, exchanging code for token, and fetching FHIR data...</p>
+    <div id="callback-status">Starting callback processing...</div>
+    <pre id="debug">Waiting for callback data...</pre>
+  </main>
+
+  <script src="js/epic-config.js"></script>
+  <script src="js/epic-auth.js"></script>
+  <script src="js/callback.js"></script>
+</body>
+</html>

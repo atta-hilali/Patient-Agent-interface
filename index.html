@@ -267,7 +267,7 @@
     </div>
     <div class="chat-header-info">
       <div class="chat-header-name">Veldooc</div>
-      <div class="chat-header-sub">
+      <div class="chat-header-sub" id="chat-header-status">
         <div class="online-dot"></div>
         Ready · Sarah's record loaded
       </div>
@@ -285,12 +285,12 @@
 
   <!-- Context chips -->
   <div class="context-strip" id="chat-context-strip">
-    <div class="ctx-chip"><span class="ctx-chip-dot" style="background:var(--green)"></span>6 meds</div>
-    <div class="ctx-chip"><span class="ctx-chip-dot" style="background:#1D4ED8"></span>3 conditions</div>
-    <div class="ctx-chip"><span class="ctx-chip-dot" style="background:var(--amber)"></span>Mar 22 appt</div>
-    <div class="ctx-chip"><span class="ctx-chip-dot" style="background:#7C3AED"></span>12 labs</div>
-    <div class="ctx-chip alert"><span class="ctx-chip-dot" style="background:var(--red)"></span>Allergy: Penicillin</div>
-    <div class="ctx-chip"><span class="ctx-chip-dot" style="background:var(--teal)"></span>1 care plan</div>
+    <div class="ctx-chip" id="chip-meds"><span class="ctx-chip-dot" style="background:var(--green)"></span>6 meds</div>
+    <div class="ctx-chip" id="chip-conditions"><span class="ctx-chip-dot" style="background:#1D4ED8"></span>3 conditions</div>
+    <div class="ctx-chip" id="chip-appointments"><span class="ctx-chip-dot" style="background:var(--amber)"></span>next appt n/a</div>
+    <div class="ctx-chip" id="chip-labs"><span class="ctx-chip-dot" style="background:#7C3AED"></span>12 labs</div>
+    <div class="ctx-chip alert" id="chip-allergy"><span class="ctx-chip-dot" style="background:var(--red)"></span>Allergy data</div>
+    <div class="ctx-chip" id="chip-docs"><span class="ctx-chip-dot" style="background:var(--teal)"></span>0 documents</div>
   </div>
 
   <div class="messages-area" id="messages">
@@ -334,6 +334,10 @@
     </div>
 
   </div>
+  <details class="epic-debug" id="epic-debug-panel">
+    <summary>Epic Raw JSON (debug)</summary>
+    <pre id="epic-debug">No Epic OAuth session data yet.</pre>
+  </details>
 
   <!-- Input area -->
   <div class="input-area">
@@ -379,6 +383,9 @@
 </main>
 
 <script src="js/navigation.js"></script>
+<script src="js/epic-config.js"></script>
+<script src="js/epic-auth.js"></script>
+<script src="js/epic-ui.js"></script>
 <script src="js/ehr-flow.js"></script>
 <script src="js/login-flow.js"></script>
 <script src="js/loading-flow.js"></script>

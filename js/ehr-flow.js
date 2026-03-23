@@ -35,13 +35,22 @@ function filterEhr(query) {
   });
 }
 
-function doRedirect() {
+async function doRedirect() {
   if (!selectedEhr) return;
 
   const info = document.getElementById('redirect-info');
   const text = document.getElementById('redirect-text');
   info?.classList.add('show');
-  if (text) text.textContent = 'Generating PKCE challenge...';
+  if (text) text.textContent = `Preparing ${ehrNames[selectedEhr]} login...`;
+
+  if (selectedEhr === 'epic') {
+    try {
+      await startEpicLogin();
+    } catch (error) {
+      if (text) text.textContent = error.message;
+    }
+    return;
+  }
 
   setTimeout(() => {
     if (text) text.textContent = `Redirecting to ${ehrNames[selectedEhr]}...`;
