@@ -14,6 +14,13 @@ This UI has been split from one monolithic file into clear frontend layers:
 - `js/epic-config.js`: Epic sandbox OAuth/FHIR config values.
 - `js/epic-auth.js`: PKCE generation, authorize redirect, token exchange, and FHIR fetch helpers.
 - `js/epic-ui.js`: Injects fetched Epic data into chat chips/header/debug panel.
+- `js/workflow-adapter-registry.js`: Pluggable source adapters (`fhir`, `hl7`, `cda`, `rest`, `csv`, `manual`).
+- `js/workflow-normalizer.js`: Universal PatientContext normalizer.
+- `js/workflow-cache.js`: Session cache (5-minute TTL) keyed by `patient_id + source_id`.
+- `js/workflow-prompt.js`: System prompt builder from normalized context.
+- `js/workflow-engine.js`: Adapter -> normalizer -> cache -> prompt orchestration.
+- `js/workflow-mock-sources.js`: Mock-source seeding for non-Epic adapters during UI development.
+- `js/workflow-ui.js`: Renders normalized context/prompt debug panels in chat.
 - `js/callback.js`: Runs callback processing in `callback.html`.
 - `js/ehr-flow.js`: EHR selection and Epic launch trigger.
 - `js/login-flow.js`: Login step transitions (credentials -> MFA -> consent).
@@ -21,6 +28,14 @@ This UI has been split from one monolithic file into clear frontend layers:
 - `js/session-timer.js`: Chat session timer.
 - `js/chat-flow.js`: Static chat interaction layer (quick replies, send, voice/image simulation, toasts).
 - `js/app-init.js`: Central startup/init wiring for all screen flows.
+- `backend/app/main.py`: FastAPI service with Epic OAuth callback and workflow APIs.
+- `backend/app/epic.py`: Epic OAuth/token/FHIR client helpers.
+- `backend/app/workflow.py`: Python adapter/normalizer/cache/prompt pipeline.
+- `backend/app/oauth_state.py`: PKCE state store with TTL.
+- `backend/app/config.py`: Backend settings/env loading.
+- `backend/requirements.txt`: Python dependencies.
+- `backend/.env.example`: Backend environment template.
+- `backend/README.md`: Backend setup and run guide.
 
 ## Screen IDs (for backend wiring)
 
@@ -44,3 +59,10 @@ This UI has been split from one monolithic file into clear frontend layers:
 - Move token exchange/FHIR calls to a backend service for production security controls.
 - Replace sandbox config values and scopes with your final Epic-approved scope set.
 - Add API-level auditing, refresh-token lifecycle handling, and error telemetry.
+
+## Python Backend Mode
+
+- Frontend config uses `EPIC_CONFIG.authMode` in `js/epic-config.js`.
+- `authMode: "browser"` keeps the original browser-only flow.
+- `authMode: "backend"` routes OAuth callback/token/FHIR through FastAPI.
+- `authMode: "hybrid"` tries backend first and falls back to browser flow.

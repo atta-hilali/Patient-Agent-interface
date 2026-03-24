@@ -15,6 +15,9 @@ function selectEhr(id) {
 
   selectedEhr = id;
   document.getElementById(`opt-${id}`)?.classList.add('selected');
+  const sourceType = typeof getSourceTypeFromEhrId === 'function' ? getSourceTypeFromEhrId(id) : 'manual';
+  sessionStorage.setItem('workflow_selected_source_type', sourceType);
+  sessionStorage.setItem('workflow_selected_source_id', id);
 
   const btn = document.getElementById('ehr-continue-btn');
   if (btn) {
@@ -50,6 +53,11 @@ async function doRedirect() {
       if (text) text.textContent = error.message;
     }
     return;
+  }
+
+  if (typeof seedMockWorkflowForSource === 'function') {
+    const sourceType = typeof getSourceTypeFromEhrId === 'function' ? getSourceTypeFromEhrId(selectedEhr) : 'manual';
+    seedMockWorkflowForSource(sourceType, selectedEhr);
   }
 
   setTimeout(() => {

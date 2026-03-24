@@ -1,0 +1,132 @@
+from __future__ import annotations
+
+import base64
+import hashlib
+import json
+import time
+from dataclasses import dataclass
+from typing import Any
+
+from .config import Settings
+
+try:
+    from cryptography.fernet import Fernet, InvalidToken
+except Exception:  # noqa: BLE001
+    Fernet = None  # type: ignore[assignment]
+    InvalidToken = Exception  # type: ignore[assignment]
+
+try:
+    from redis.asyncio import Redis
+except Exception:  # noqa: BLE001
+    Redis = None  # type: ignore[assignment]
+
+
+def _derive_fernet_key(secret: str) -> bytes:
+    digest = hashlib.sha256(secret.encode("utf-8")).digest()
+    return base64.urlsafe_b64encode(digest)
+
+
+def _build_fernet(secret: str) -> Fernet | None:
+    if Fernet is None:
+        return None
+    try:
+        return Fernet(secret.encode("utf-8"))
+    except Exception:  # noqa: BLE001
+        return Fernet(_derive_fernet_key(secret))
+
+
+@dataclass
+class InMemoryEntry:
+    value: bytes
+    expires_at: float
+
+
+class WorkflowCache:
+    def __init__(self, settings: Settings) -> None:
+        self.ttl_sec = settings.workflow_cache_ttl_sec
+        self.key_prefix = settings.workflow_cache_key_prefix
+        self.encrypt_enabled = settings.workflow_cache_encrypt
+        self._fernet = _build_fernet(settings.context_encryption_key) if self.encrypt_enabled else None
+        self._memory: dict[str, InMemoryEntry] = {}
+        self._redis: Redis | None = None
+
+        if settings.redis_url and Redis is not None:
+            try:
+                self._redis = Redis.from_url(settings.redis_url, decode_responses=False)
+            except Exception:  # noqa: BLE001
+                self._redis = None
+
+    def cache_key(self, source_id: str, patient_id: str) -> str:
+        return f"{self.key_prefix}:{source_id}:{patient_id}"
+
+    def _cleanup_memory(self) -> None:
+        now = time.time()
+        expired = [key for key, item in self._memory.items() if item.expires_at <= now]
+        for key in expired:
+            self._memory.pop(key, None)
+
+    def _encrypt(self, payload: dict[str, Any]) -> bytes:
+        raw = json.dumps(payload, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+        if not self._fernet:
+            return raw
+        return self._fernet.encrypt(raw)
+
+    def _decrypt(self, value: bytes) -> dict[str, Any] | None:
+        raw = value
+        if self._fernet:
+            try:
+                raw = self._fernet.decrypt(value)
+            except InvalidToken:
+                return None
+        try:
+            parsed = json.loads(raw.decode("utf-8"))
+        except Exception:  # noqa: BLE001
+            return None
+        return parsed if isinstance(parsed, dict) else None
+
+    async def get(self, *, source_id: str, patient_id: str) -> dict[str, Any] | None:
+        key = self.cache_key(source_id=source_id, patient_id=patient_id)
+
+        if self._redis:
+            try:
+                cached = await self._redis.get(key)
+                if cached:
+                    if isinstance(cached, str):
+                        cached = cached.encode("utf-8")
+                    decoded = self._decrypt(cached)
+                    if decoded:
+                        return decoded
+            except Exception:  # noqa: BLE001
+                self._redis = None
+
+        self._cleanup_memory()
+        item = self._memory.get(key)
+        if not item:
+            return None
+        return self._decrypt(item.value)
+
+    async def set(self, *, source_id: str, patient_id: str, snapshot: dict[str, Any]) -> None:
+        key = self.cache_key(source_id=source_id, patient_id=patient_id)
+        encoded = self._encrypt(snapshot)
+
+        if self._redis:
+            try:
+                await self._redis.set(key, encoded, ex=self.ttl_sec)
+                return
+            except Exception:  # noqa: BLE001
+                self._redis = None
+
+        self._cleanup_memory()
+        self._memory[key] = InMemoryEntry(value=encoded, expires_at=time.time() + self.ttl_sec)
+
+    async def exists(self, *, source_id: str, patient_id: str) -> bool:
+        key = self.cache_key(source_id=source_id, patient_id=patient_id)
+
+        if self._redis:
+            try:
+                return bool(await self._redis.exists(key))
+            except Exception:  # noqa: BLE001
+                self._redis = None
+
+        self._cleanup_memory()
+        return key in self._memory

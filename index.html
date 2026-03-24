@@ -338,6 +338,15 @@
     <summary>Epic Raw JSON (debug)</summary>
     <pre id="epic-debug">No Epic OAuth session data yet.</pre>
   </details>
+  <details class="epic-debug" id="workflow-context-panel">
+    <summary>Normalized PatientContext</summary>
+    <pre id="workflow-context-debug">No normalized context yet.</pre>
+  </details>
+  <details class="epic-debug" id="workflow-prompt-panel">
+    <summary>System Prompt Builder Output</summary>
+    <pre id="workflow-prompt-debug">No system prompt yet.</pre>
+  </details>
+  <div class="workflow-status" id="workflow-status">Workflow not initialized yet.</div>
 
   <!-- Input area -->
   <div class="input-area">
@@ -385,6 +394,13 @@
 <script src="js/navigation.js"></script>
 <script src="js/epic-config.js"></script>
 <script src="js/epic-auth.js"></script>
+<script src="js/workflow-cache.js"></script>
+<script src="js/workflow-adapter-registry.js"></script>
+<script src="js/workflow-normalizer.js"></script>
+<script src="js/workflow-prompt.js"></script>
+<script src="js/workflow-engine.js"></script>
+<script src="js/workflow-mock-sources.js"></script>
+<script src="js/workflow-ui.js"></script>
 <script src="js/epic-ui.js"></script>
 <script src="js/ehr-flow.js"></script>
 <script src="js/login-flow.js"></script>

@@ -12,11 +12,10 @@ async function sha256Base64Url(value) {
   const data = new TextEncoder().encode(value);
   const digest = await crypto.subtle.digest('SHA-256', data);
   const bytes = Array.from(new Uint8Array(digest));
-  const b64 = btoa(String.fromCharCode(...bytes))
+  return btoa(String.fromCharCode(...bytes))
     .replace(/\+/g, '-')
     .replace(/\//g, '_')
     .replace(/=+$/, '');
-  return b64;
 }
 
 function getQueryParams(search = window.location.search) {
@@ -47,9 +46,53 @@ function loadEpicSession() {
 function clearEpicAuthArtifacts() {
   sessionStorage.removeItem('epic_state');
   sessionStorage.removeItem('epic_code_verifier');
+  sessionStorage.removeItem('epic_auth_transport');
 }
 
-async function startEpicLogin() {
+function getAuthMode() {
+  return EPIC_CONFIG?.authMode || 'browser';
+}
+
+function getBackendBaseUrl() {
+  return (EPIC_CONFIG?.backendBaseUrl || '').replace(/\/+$/, '');
+}
+
+async function fetchJsonWithTimeout(url, options = {}, timeoutMs = 6000) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    const text = await res.text();
+    let json = null;
+    try {
+      json = text ? JSON.parse(text) : null;
+    } catch {
+      json = null;
+    }
+    if (!res.ok) {
+      const detail = json?.detail || text || `HTTP ${res.status}`;
+      throw new Error(detail);
+    }
+    return json;
+  } finally {
+    clearTimeout(id);
+  }
+}
+
+async function startEpicLoginViaBackend() {
+  const base = getBackendBaseUrl();
+  if (!base) throw new Error('EPIC_CONFIG.backendBaseUrl is missing.');
+  const response = await fetchJsonWithTimeout(`${base}/auth/epic/start?format=json`, {
+    method: 'GET',
+    credentials: 'omit'
+  });
+  const authorizeUrl = response?.authorize_url;
+  if (!authorizeUrl) throw new Error('Backend did not return authorize_url.');
+  sessionStorage.setItem('epic_auth_transport', 'backend');
+  window.location.href = authorizeUrl;
+}
+
+async function startEpicLoginBrowser() {
   if (!EPIC_CONFIG || !EPIC_CONFIG.clientId || EPIC_CONFIG.clientId.includes('YOUR_NON_PRD')) {
     throw new Error('Set EPIC_CONFIG.clientId with your Epic Non-Production Client ID first.');
   }
@@ -60,6 +103,7 @@ async function startEpicLogin() {
 
   sessionStorage.setItem('epic_state', state);
   sessionStorage.setItem('epic_code_verifier', codeVerifier);
+  sessionStorage.setItem('epic_auth_transport', 'browser');
 
   const url =
     `${EPIC_CONFIG.authorizeUrl}?` +
@@ -73,6 +117,25 @@ async function startEpicLogin() {
     `code_challenge_method=S256`;
 
   window.location.href = url;
+}
+
+async function startEpicLogin() {
+  const mode = getAuthMode();
+  if (mode === 'backend') {
+    await startEpicLoginViaBackend();
+    return;
+  }
+
+  if (mode === 'hybrid') {
+    try {
+      await startEpicLoginViaBackend();
+      return;
+    } catch {
+      // Fallback to known working browser path.
+    }
+  }
+
+  await startEpicLoginBrowser();
 }
 
 async function exchangeCodeForToken(code) {
@@ -148,13 +211,16 @@ async function fetchEpicPatientData(tokenResponse) {
   }
   if (!patientId) throw new Error('No patient ID in token response and no patient found.');
 
-  const [patient, conditions, observations, medications, documents] = await Promise.all([
-    fetchFhirJson(accessToken, `Patient/${encodeURIComponent(patientId)}`),
-    tryFetchFhirJson(accessToken, `Condition?patient=${encodeURIComponent(patientId)}&_count=20`),
-    tryFetchFhirJson(accessToken, `Observation?patient=${encodeURIComponent(patientId)}&_count=20`),
-    tryFetchFhirJson(accessToken, `MedicationRequest?patient=${encodeURIComponent(patientId)}&_count=20`),
-    tryFetchFhirJson(accessToken, `DocumentReference?patient=${encodeURIComponent(patientId)}&_count=20`)
-  ]);
+  const [patient, conditions, observations, medications, documents, allergies, appointments] =
+    await Promise.all([
+      fetchFhirJson(accessToken, `Patient/${encodeURIComponent(patientId)}`),
+      tryFetchFhirJson(accessToken, `Condition?patient=${encodeURIComponent(patientId)}&_count=20`),
+      tryFetchFhirJson(accessToken, `Observation?patient=${encodeURIComponent(patientId)}&_count=20`),
+      tryFetchFhirJson(accessToken, `MedicationRequest?patient=${encodeURIComponent(patientId)}&_count=20`),
+      tryFetchFhirJson(accessToken, `DocumentReference?patient=${encodeURIComponent(patientId)}&_count=20`),
+      tryFetchFhirJson(accessToken, `AllergyIntolerance?patient=${encodeURIComponent(patientId)}&_count=20`),
+      tryFetchFhirJson(accessToken, `Appointment?patient=${encodeURIComponent(patientId)}&_count=20`)
+    ]);
 
   return {
     fetchedAt: new Date().toISOString(),
@@ -173,12 +239,35 @@ async function fetchEpicPatientData(tokenResponse) {
       conditions,
       observations,
       medications,
-      documents
+      documents,
+      allergies,
+      appointments
     }
   };
 }
 
-async function completeEpicOAuth(query) {
+async function completeEpicOAuthViaBackend(query) {
+  const base = getBackendBaseUrl();
+  if (!base) throw new Error('EPIC_CONFIG.backendBaseUrl is missing.');
+
+  const url =
+    `${base}/auth/epic/callback?` +
+    `code=${encodeURIComponent(query.code || '')}&` +
+    `state=${encodeURIComponent(query.state || '')}`;
+
+  const payload = await fetchJsonWithTimeout(url, { method: 'GET', credentials: 'omit' }, 18000);
+  if (!payload?.session) throw new Error('Backend callback response is missing session data.');
+
+  saveEpicSession(payload.session);
+  if (payload.workflow) {
+    sessionStorage.setItem('workflow_latest_snapshot', JSON.stringify(payload.workflow));
+    document.dispatchEvent(new CustomEvent('workflow:updated', { detail: payload.workflow }));
+  }
+  clearEpicAuthArtifacts();
+  return payload.session;
+}
+
+async function completeEpicOAuthBrowser(query) {
   const storedState = sessionStorage.getItem('epic_state');
   if (!query.code) throw new Error('Missing authorization code in callback URL.');
   if (!query.state || query.state !== storedState) throw new Error('State validation failed.');
@@ -188,6 +277,26 @@ async function completeEpicOAuth(query) {
   saveEpicSession(epicData);
   clearEpicAuthArtifacts();
   return epicData;
+}
+
+async function completeEpicOAuth(query) {
+  const mode = getAuthMode();
+  const transport = sessionStorage.getItem('epic_auth_transport');
+
+  if (transport === 'backend' || (mode === 'backend' && transport !== 'browser')) {
+    return completeEpicOAuthViaBackend(query);
+  }
+
+  if (transport === 'browser' || mode === 'browser') {
+    return completeEpicOAuthBrowser(query);
+  }
+
+  // Hybrid fallback behavior: try backend first, then browser if backend not used.
+  try {
+    return await completeEpicOAuthViaBackend(query);
+  } catch {
+    return completeEpicOAuthBrowser(query);
+  }
 }
 
 async function handleEpicCallbackPage({
@@ -211,7 +320,7 @@ async function handleEpicCallbackPage({
   try {
     setStatus('Validating callback...');
     const session = await completeEpicOAuth(query);
-    if (debugEl) debugEl.textContent = JSON.stringify(session.raw, null, 2);
+    if (debugEl) debugEl.textContent = JSON.stringify(session.raw || session, null, 2);
     setStatus('Success. Redirecting to app...');
     setTimeout(() => {
       window.location.replace(redirectTo);

@@ -22,6 +22,27 @@ function initChatFlow() {
   let isRecording = false;
   let recordTimer = null;
   let toastTimer = null;
+  let safetyRequestInFlight = false;
+
+  function getBackendBaseUrl() {
+    return (window.EPIC_CONFIG?.backendBaseUrl || '').replace(/\/+$/, '');
+  }
+
+  async function runPreflightSafetyCheck(text) {
+    const baseUrl = getBackendBaseUrl();
+    if (!baseUrl) return null;
+    try {
+      const response = await fetch(`${baseUrl}/chat/preflight`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      });
+      if (!response.ok) return null;
+      return response.json();
+    } catch {
+      return null;
+    }
+  }
 
   function showToast(text) {
     toast.textContent = text;
@@ -131,15 +152,31 @@ function initChatFlow() {
     return group;
   }
 
-  function sendMessage(text) {
+  async function sendMessage(text) {
     const message = text.trim();
-    if (!message) return;
+    if (!message || safetyRequestInFlight) return;
+
+    safetyRequestInFlight = true;
 
     messages.appendChild(createPatientMessage(message));
     input.value = '';
     autoResize();
     updateSendState();
     scrollToBottom();
+
+    const preflight = await runPreflightSafetyCheck(message);
+    if (preflight?.escalate) {
+      messages.appendChild(
+        createAgentMessage({
+          html: 'Your message may need immediate clinical review. I am escalating this to a clinician now.',
+          source: 'Safety pre-flight escalation'
+        })
+      );
+      scrollToBottom();
+      showToast('Safety escalation triggered.');
+      safetyRequestInFlight = false;
+      return;
+    }
 
     const typing = createTypingBubble();
     messages.appendChild(typing);
@@ -150,6 +187,7 @@ function initChatFlow() {
       typing.remove();
       messages.appendChild(createAgentMessage(reply));
       scrollToBottom();
+      safetyRequestInFlight = false;
     }, 900);
   }
 
@@ -183,7 +221,7 @@ function initChatFlow() {
   }
 
   sendBtn.addEventListener('click', () => {
-    sendMessage(input.value);
+    void sendMessage(input.value);
   });
 
   input.addEventListener('input', () => {
@@ -194,12 +232,14 @@ function initChatFlow() {
   input.addEventListener('keydown', (event) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
-      sendMessage(input.value);
+      void sendMessage(input.value);
     }
   });
 
   document.querySelectorAll('.quick-reply').forEach((btn) => {
-    btn.addEventListener('click', () => sendMessage(btn.textContent || ''));
+    btn.addEventListener('click', () => {
+      void sendMessage(btn.textContent || '');
+    });
   });
 
   document.querySelectorAll('.mode-btn[data-mode]').forEach((btn) => {

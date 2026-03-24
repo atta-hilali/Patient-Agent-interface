@@ -428,3 +428,14 @@
   word-break: break-word;
 }
 
+.workflow-status {
+  margin: 0 16px 10px;
+  font-size: 12px;
+  color: var(--slate-soft);
+  padding: 8px 10px;
+  border-radius: var(--r8);
+  border: 1px dashed var(--slate-line);
+  background: var(--white);
+  flex-shrink: 0;
+}
+

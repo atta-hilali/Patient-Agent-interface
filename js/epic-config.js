@@ -1,6 +1,13 @@
 const EPIC_CONFIG = Object.freeze({
   // Replace with your Epic Non-Production Client ID.
   clientId: 'ffbfa6c6-03a5-488a-9d01-e1b066e3030c',
+  // Auth execution mode:
+  // browser = current direct-in-browser OAuth/token/FHIR flow
+  // backend = force Python backend flow
+  // hybrid  = try backend first, fallback to browser
+  authMode: 'backend',
+  // Python backend base URL (FastAPI). Keep same-origin if using reverse proxy.
+  backendBaseUrl: 'http://127.0.0.1:8000',
   // Must exactly match a redirect URI registered in Epic (character-for-character).
   // Use your stable production hostname here (not window.location.origin, which can vary on preview/local URLs).
   redirectUri: 'https://patientagent.vercel.app/callback.html',

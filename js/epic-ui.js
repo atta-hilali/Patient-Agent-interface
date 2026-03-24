@@ -30,7 +30,6 @@ function appendEpicWelcomeMessage(session) {
 function renderEpicSession(session) {
   if (!session || !session.raw) return;
 
-  const patient = session.raw.patient || {};
   const conditions = session.raw.conditions || {};
   const observations = session.raw.observations || {};
   const medications = session.raw.medications || {};
@@ -50,6 +49,10 @@ function renderEpicSession(session) {
   if (panel) panel.open = true;
 
   appendEpicWelcomeMessage(session);
+
+  if (typeof syncWorkflowFromEpicSession === 'function') {
+    syncWorkflowFromEpicSession(session);
+  }
 }
 
 function initEpicUi() {
