@@ -7,7 +7,7 @@ const EPIC_CONFIG = Object.freeze({
   // hybrid  = try backend first, fallback to browser
   authMode: 'backend',
   // Python backend base URL (FastAPI). Keep same-origin if using reverse proxy.
-  backendBaseUrl: 'http://127.0.0.1:8000',
+  backendBaseUrl: 'https://patient-agent-interface.onrender.com',
   // Must exactly match a redirect URI registered in Epic (character-for-character).
   // Use your stable production hostname here (not window.location.origin, which can vary on preview/local URLs).
   redirectUri: 'https://patientagent.vercel.app/callback.html',
