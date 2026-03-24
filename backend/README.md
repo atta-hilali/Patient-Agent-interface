@@ -54,3 +54,21 @@ In `js/epic-config.js`:
 - `authMode: "backend"` to force backend
 - `authMode: "hybrid"` to try backend then fallback to browser
 - `backendBaseUrl: "http://127.0.0.1:8000"`
+
+## 6. Render deployment (production)
+
+Use these exact settings for a monorepo where backend lives in `backend/`:
+
+- Root Directory: `backend`
+- Build Command: `pip install -r requirements.txt`
+- Start Command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+
+Python version is pinned in `backend/.python-version`:
+
+- `3.11.11`
+
+If your existing Render service still builds with Python 3.14, also set:
+
+- Environment Variable: `PYTHON_VERSION=3.11.11`
+
+After changing Python version, trigger a fresh deploy.
