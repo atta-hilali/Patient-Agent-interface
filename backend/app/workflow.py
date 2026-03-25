@@ -10,6 +10,7 @@ from .cache import WorkflowCache
 from .config import Settings
 from .models import ConflictItem, WorkflowSnapshot, WorkflowUnlockResponse
 from .prompt_builder import build_prompt_package
+from .session_cache import SessionCache
 
 
 def _now_iso() -> str:
@@ -95,6 +96,8 @@ class WorkflowService:
         patient_id: str,
         raw_payload: dict[str, Any],
         consent_accepted: bool = False,
+        session_id: str | None = None,
+        session_cache: SessionCache | None = None,
     ) -> dict[str, Any]:
         cache_key = self.cache.cache_key(source_id=source_id, patient_id=patient_id)
         consent_ok = self._resolve_consent(cache_key=cache_key, consent_accepted=consent_accepted)
@@ -125,6 +128,9 @@ class WorkflowService:
 
         prompt_package = build_prompt_package(context)
         chat_unlock = bool(context.patientId and context.demographics) and consent_ok
+        if session_cache and session_id:
+            await session_cache.set_context(session_id, context.patientId, context.model_dump(mode="json"))
+            await session_cache.set_prompt(session_id, prompt_package.prompt)
         snapshot_model = WorkflowSnapshot(
             updatedAt=_now_iso(),
             sourceType=resolution.source_type,
@@ -190,6 +196,8 @@ async def run_workflow_pipeline(
     patient_id: str,
     raw_payload: dict[str, Any],
     consent_accepted: bool = False,
+    session_id: str | None = None,
+    session_cache: SessionCache | None = None,
 ) -> dict[str, Any]:
     return await service.ingest(
         source_type=source_type,
@@ -197,4 +205,6 @@ async def run_workflow_pipeline(
         patient_id=patient_id,
         raw_payload=raw_payload,
         consent_accepted=consent_accepted,
+        session_id=session_id,
+        session_cache=session_cache,
     )

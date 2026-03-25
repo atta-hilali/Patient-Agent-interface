@@ -108,6 +108,15 @@ class ConflictItem(BaseModel):
     citations: list[Citation] = Field(default_factory=list)
 
 
+class AuthToken(BaseModel):
+    access_token: str
+    refresh_token: str | None = None
+    patient_id: str
+    expiry: str
+    scope_list: list[str] = Field(default_factory=list)
+    adapter_type: str = ""
+
+
 class PatientContext(BaseModel):
     sourceType: str = ""
     sourceId: str = ""
@@ -188,3 +197,15 @@ class WorkflowUnlockResponse(BaseModel):
     consentAccepted: bool
     snapshotExists: bool
     cacheKey: str
+
+
+class ContextSummary(BaseModel):
+    patient_name: str
+    medication_count: int
+    condition_count: int
+    allergy_count: int
+    has_alert: bool
+    alert_message: str | None = None
+    next_appointment: str | None = None
+    session_expires_at: str | None = None
+    data_source: str | None = None

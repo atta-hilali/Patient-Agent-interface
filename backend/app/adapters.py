@@ -156,7 +156,7 @@ class SourceAdapter:
 
 
 class FhirAdapter(SourceAdapter):
-    source_type = "fhir"
+    source_type = "fhir_r4"
     adapter_name = "fhir-adapter"
 
     def _parse_medications(
@@ -641,7 +641,7 @@ class GenericStructuredAdapter(SourceAdapter):
 
 
 class Hl7v2Adapter(GenericStructuredAdapter):
-    source_type = "hl7"
+    source_type = "hl7_v2"
     adapter_name = "hl7v2-adapter"
 
 

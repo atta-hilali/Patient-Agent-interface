@@ -48,6 +48,12 @@ class Settings:
     workflow_cache_key_prefix: str
     workflow_cache_encrypt: bool
     context_encryption_key: str
+    connectors_file: str
+    internal_api_key: str
+    ctx_cache_ttl_sec: int
+    token_cache_ttl_sec: int
+    prompt_cache_ttl_sec: int
+    state_signing_key: str
 
     consent_required: bool
     consent_session_ttl_sec: int
@@ -90,6 +96,12 @@ def get_settings() -> Settings:
         workflow_cache_key_prefix=os.getenv("WORKFLOW_CACHE_KEY_PREFIX", "ctx"),
         workflow_cache_encrypt=_as_bool(os.getenv("WORKFLOW_CACHE_ENCRYPT"), True),
         context_encryption_key=os.getenv("CONTEXT_ENCRYPTION_KEY", _default_fernet_key()),
+        connectors_file=os.getenv("CONNECTORS_FILE", os.path.join(os.getcwd(), "docs", "connectors.json")),
+        internal_api_key=os.getenv("INTERNAL_API_KEY", "dev-internal-key"),
+        ctx_cache_ttl_sec=_as_int(os.getenv("CTX_CACHE_TTL_SEC"), 300),
+        token_cache_ttl_sec=_as_int(os.getenv("TOKEN_CACHE_TTL_SEC"), 1800),
+        prompt_cache_ttl_sec=_as_int(os.getenv("PROMPT_CACHE_TTL_SEC"), 1800),
+        state_signing_key=os.getenv("STATE_SIGNING_KEY", _default_fernet_key()),
         consent_required=_as_bool(os.getenv("CONSENT_REQUIRED"), True),
         consent_session_ttl_sec=_as_int(os.getenv("CONSENT_SESSION_TTL_SEC"), 3600),
         preflight_pain_threshold=_as_int(os.getenv("PREFLIGHT_PAIN_THRESHOLD"), 7),

@@ -1,3 +1,7 @@
+const STATE_KEY = 'epic_state';
+const CODE_VERIFIER_KEY = 'epic_code_verifier';
+const AUTH_TRANSPORT_KEY = 'epic_auth_transport';
+
 function randomString(length = 64) {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
   let out = '';
@@ -44,9 +48,9 @@ function loadEpicSession() {
 }
 
 function clearEpicAuthArtifacts() {
-  sessionStorage.removeItem('epic_state');
-  sessionStorage.removeItem('epic_code_verifier');
-  sessionStorage.removeItem('epic_auth_transport');
+  localStorage.removeItem(STATE_KEY);
+  localStorage.removeItem(CODE_VERIFIER_KEY);
+  localStorage.removeItem(AUTH_TRANSPORT_KEY);
 }
 
 function getAuthMode() {
@@ -88,7 +92,7 @@ async function startEpicLoginViaBackend() {
   });
   const authorizeUrl = response?.authorize_url;
   if (!authorizeUrl) throw new Error('Backend did not return authorize_url.');
-  sessionStorage.setItem('epic_auth_transport', 'backend');
+  localStorage.setItem(AUTH_TRANSPORT_KEY, 'backend');
   window.location.href = authorizeUrl;
 }
 
@@ -101,9 +105,9 @@ async function startEpicLoginBrowser() {
   const codeVerifier = randomString(64);
   const codeChallenge = await sha256Base64Url(codeVerifier);
 
-  sessionStorage.setItem('epic_state', state);
-  sessionStorage.setItem('epic_code_verifier', codeVerifier);
-  sessionStorage.setItem('epic_auth_transport', 'browser');
+  localStorage.setItem(STATE_KEY, state);
+  localStorage.setItem(CODE_VERIFIER_KEY, codeVerifier);
+  localStorage.setItem(AUTH_TRANSPORT_KEY, 'browser');
 
   const url =
     `${EPIC_CONFIG.authorizeUrl}?` +
@@ -139,8 +143,8 @@ async function startEpicLogin() {
 }
 
 async function exchangeCodeForToken(code) {
-  const codeVerifier = sessionStorage.getItem('epic_code_verifier');
-  if (!codeVerifier) throw new Error('Missing code_verifier in sessionStorage.');
+  const codeVerifier = localStorage.getItem(CODE_VERIFIER_KEY);
+  if (!codeVerifier) throw new Error('Missing code_verifier in localStorage.');
 
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
@@ -268,9 +272,15 @@ async function completeEpicOAuthViaBackend(query) {
 }
 
 async function completeEpicOAuthBrowser(query) {
-  const storedState = sessionStorage.getItem('epic_state');
+  const storedState = localStorage.getItem(STATE_KEY);
   if (!query.code) throw new Error('Missing authorization code in callback URL.');
-  if (!query.state || query.state !== storedState) throw new Error('State validation failed.');
+  if (!query.state || query.state !== storedState) {
+    // If state mismatch but we are configured for backend, fall back to backend flow
+    if (getAuthMode() === 'backend') {
+      return completeEpicOAuthViaBackend(query);
+    }
+    throw new Error('State validation failed.');
+  }
 
   const tokenResponse = await exchangeCodeForToken(query.code);
   const epicData = await fetchEpicPatientData(tokenResponse);
@@ -281,9 +291,10 @@ async function completeEpicOAuthBrowser(query) {
 
 async function completeEpicOAuth(query) {
   const mode = getAuthMode();
-  const transport = sessionStorage.getItem('epic_auth_transport');
+  const transport = localStorage.getItem(AUTH_TRANSPORT_KEY);
+  const looksSignedState = typeof query.state === 'string' && query.state.includes('.') && query.state.length > 40;
 
-  if (transport === 'backend' || (mode === 'backend' && transport !== 'browser')) {
+  if (transport === 'backend' || looksSignedState || mode === 'backend') {
     return completeEpicOAuthViaBackend(query);
   }
 

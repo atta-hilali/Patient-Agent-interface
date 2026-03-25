@@ -1,0 +1,14 @@
+[
+  {
+    "clinic_id": "demo-clinic",
+    "adapter_type": "fhir_r4",
+    "base_url": "https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4",
+    "auth_method": "smart_pkce",
+    "client_id": "",
+    "topic_yaml": "default",
+    "write_back": "fhir",
+    "specialty": "general",
+    "cache_ttl_s": 300,
+    "active": true
+  }
+]
