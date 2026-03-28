@@ -3,6 +3,7 @@ const screenIds = new Set([
   'screen-ehr',
   'screen-login',
   'screen-loading',
+  'screen-csv-map',
   'screen-chat'
 ]);
 

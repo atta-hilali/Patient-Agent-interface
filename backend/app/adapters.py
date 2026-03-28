@@ -4,6 +4,9 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
+from .cda_parser import parse_cda_xml
+from .csv_mapper import apply_csv_mapping
+from .hl7_parser import parse_hl7_message
 from .models import (
     AllergyItem,
     AppointmentItem,
@@ -644,10 +647,38 @@ class Hl7v2Adapter(GenericStructuredAdapter):
     source_type = "hl7"
     adapter_name = "hl7v2-adapter"
 
+    def adapt(
+        self,
+        *,
+        source_id: str,
+        patient_id: str,
+        raw_payload: dict[str, Any],
+    ) -> PatientContext:
+        payload = raw_payload
+        message = raw_payload.get("hl7Message")
+        if isinstance(message, str) and message.strip():
+            payload = parse_hl7_message(message)
+        return super().adapt(source_id=source_id, patient_id=patient_id, raw_payload=payload)
+
 
 class CdaAdapter(GenericStructuredAdapter):
     source_type = "cda"
     adapter_name = "cda-adapter"
+
+    def adapt(
+        self,
+        *,
+        source_id: str,
+        patient_id: str,
+        raw_payload: dict[str, Any],
+    ) -> PatientContext:
+        payload = raw_payload
+        cda_xml = raw_payload.get("cdaXml") or raw_payload.get("xml")
+        xpath_map = raw_payload.get("xpathMap")
+        if isinstance(cda_xml, str) and cda_xml.strip():
+            parsed = parse_cda_xml(cda_xml, xpath_map=xpath_map if isinstance(xpath_map, dict) else None)
+            payload = parsed
+        return super().adapt(source_id=source_id, patient_id=patient_id, raw_payload=payload)
 
 
 class RestApiAdapter(GenericStructuredAdapter):
@@ -658,6 +689,24 @@ class RestApiAdapter(GenericStructuredAdapter):
 class CsvAdapter(GenericStructuredAdapter):
     source_type = "csv"
     adapter_name = "csv-adapter"
+
+    def adapt(
+        self,
+        *,
+        source_id: str,
+        patient_id: str,
+        raw_payload: dict[str, Any],
+    ) -> PatientContext:
+        payload = raw_payload
+        csv_text = raw_payload.get("csvText")
+        mapping = raw_payload.get("mapping")
+        if isinstance(csv_text, str) and csv_text.strip():
+            payload = apply_csv_mapping(
+                csv_text=csv_text,
+                mapping=mapping if isinstance(mapping, dict) else None,
+                patient_id_hint=patient_id,
+            )
+        return super().adapt(source_id=source_id, patient_id=patient_id, raw_payload=payload)
 
 
 class ManualAdapter(GenericStructuredAdapter):

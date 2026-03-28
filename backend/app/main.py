@@ -16,11 +16,15 @@ from .epic import (
     sha256_base64url,
 )
 from .models import (
+    CdaIngestRequest,
+    CsvIngestRequest,
+    Hl7IngestRequest,
     NormalizeRequest,
     SafetyCheckRequest,
     WorkflowIngestRequest,
     WorkflowUnlockRequest,
 )
+from .hl7_mllp import Hl7MllpListener
 from .oauth_state import OAuthStateStore
 from .safety import run_preflight_safety_check
 from .workflow import WorkflowService, run_workflow_pipeline
@@ -30,6 +34,8 @@ settings = get_settings()
 oauth_state_store = OAuthStateStore(ttl_sec=settings.oauth_state_ttl_sec)
 workflow_cache = WorkflowCache(settings=settings)
 workflow_service = WorkflowService(settings=settings, cache=workflow_cache)
+hl7_listener: Hl7MllpListener | None = None
+hl7_recent_messages: list[dict[str, Any]] = []
 
 app = FastAPI(title=settings.app_name)
 
@@ -42,6 +48,49 @@ app.add_middleware(
 )
 
 
+async def _handle_mllp_message(message: str, peer: str) -> dict[str, Any]:
+    snapshot = await run_workflow_pipeline(
+        service=workflow_service,
+        source_type="hl7",
+        source_id=settings.hl7_mllp_source_id,
+        patient_id="hl7-patient",
+        raw_payload={"hl7Message": message},
+    )
+    record = {
+        "receivedAt": snapshot.get("updatedAt"),
+        "peer": peer,
+        "sourceId": settings.hl7_mllp_source_id,
+        "patientId": snapshot.get("patientId"),
+        "cacheKey": snapshot.get("cacheKey"),
+    }
+    hl7_recent_messages.append(record)
+    if len(hl7_recent_messages) > 100:
+        del hl7_recent_messages[0 : len(hl7_recent_messages) - 100]
+    return record
+
+
+@app.on_event("startup")
+async def startup_event() -> None:
+    await workflow_cache.ping()
+
+    global hl7_listener
+    if settings.hl7_mllp_enabled:
+        hl7_listener = Hl7MllpListener(
+            host=settings.hl7_mllp_host,
+            port=settings.hl7_mllp_port,
+            on_message=_handle_mllp_message,
+        )
+        await hl7_listener.start()
+
+
+@app.on_event("shutdown")
+async def shutdown_event() -> None:
+    global hl7_listener
+    if hl7_listener:
+        await hl7_listener.stop()
+        hl7_listener = None
+
+
 @app.get("/health")
 async def health() -> dict[str, Any]:
     return {"ok": True, "service": settings.app_name, "env": settings.env}
@@ -52,7 +101,7 @@ async def root() -> dict[str, Any]:
     return {
         "ok": True,
         "service": settings.app_name,
-        "message": "Backend is running. Use /docs, /health, /auth/epic/start, /workflow/ingest.",
+        "message": "Backend is running. Use /docs, /health, /auth/epic/start, /workflow/ingest, /workflow/ingest/csv.",
     }
 
 
@@ -64,6 +113,23 @@ async def favicon() -> Response:
 @app.get("/workflow/sources")
 async def workflow_sources() -> dict[str, Any]:
     return {"supportedSourceTypes": workflow_service.adapter_registry.supported_source_types()}
+
+
+@app.get("/hl7/mllp/status")
+async def hl7_mllp_status() -> dict[str, Any]:
+    return {
+        "enabled": settings.hl7_mllp_enabled,
+        "running": bool(hl7_listener and hl7_listener.is_running),
+        "host": settings.hl7_mllp_host,
+        "port": settings.hl7_mllp_port,
+        "sourceId": settings.hl7_mllp_source_id,
+        "recentMessages": len(hl7_recent_messages),
+    }
+
+
+@app.get("/hl7/mllp/messages")
+async def hl7_mllp_messages() -> dict[str, Any]:
+    return {"messages": hl7_recent_messages[-50:]}
 
 
 @app.get("/auth/epic/start")
@@ -150,6 +216,60 @@ async def workflow_normalize(request: NormalizeRequest) -> dict[str, Any]:
 @app.post("/workflow/ingest")
 async def workflow_ingest(request: WorkflowIngestRequest) -> dict[str, Any]:
     return await _ingest_request(request)
+
+
+@app.post("/workflow/ingest/hl7")
+async def workflow_ingest_hl7(request: Hl7IngestRequest) -> dict[str, Any]:
+    try:
+        snapshot = await run_workflow_pipeline(
+            service=workflow_service,
+            source_type="hl7",
+            source_id=request.sourceId,
+            patient_id=request.patientId or "hl7-patient",
+            raw_payload={"hl7Message": request.hl7Message},
+            consent_accepted=request.consentAccepted,
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return snapshot
+
+
+@app.post("/workflow/ingest/cda")
+async def workflow_ingest_cda(request: CdaIngestRequest) -> dict[str, Any]:
+    try:
+        snapshot = await run_workflow_pipeline(
+            service=workflow_service,
+            source_type="cda",
+            source_id=request.sourceId,
+            patient_id=request.patientId or "cda-patient",
+            raw_payload={
+                "cdaXml": request.cdaXml,
+                "xpathMap": request.xpathMap,
+            },
+            consent_accepted=request.consentAccepted,
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return snapshot
+
+
+@app.post("/workflow/ingest/csv")
+async def workflow_ingest_csv(request: CsvIngestRequest) -> dict[str, Any]:
+    try:
+        snapshot = await run_workflow_pipeline(
+            service=workflow_service,
+            source_type="csv",
+            source_id=request.sourceId,
+            patient_id=request.patientId or "csv-patient",
+            raw_payload={
+                "csvText": request.csvText,
+                "mapping": request.mapping,
+            },
+            consent_accepted=request.consentAccepted,
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return snapshot
 
 
 @app.post("/chat/preflight")

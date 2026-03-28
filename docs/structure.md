@@ -10,6 +10,7 @@ This UI has been split from one monolithic file into clear frontend layers:
 - `styles/main.css`: CSS entry file that imports all style modules.
 - `styles/core.css`: Global tokens, reset, and shared router styles.
 - `styles/screens/*.css`: Per-screen styling (`welcome`, `ehr`, `login`, `loading`, `chat`).
+- `styles/screens/csv.css`: CSV mapping/import screen styling.
 - `js/navigation.js`: Screen router with hash-based navigation.
 - `js/epic-config.js`: Epic sandbox OAuth/FHIR config values.
 - `js/epic-auth.js`: PKCE generation, authorize redirect, token exchange, and FHIR fetch helpers.
@@ -27,10 +28,15 @@ This UI has been split from one monolithic file into clear frontend layers:
 - `js/loading-flow.js`: Loading-state observation and auto-advance to chat.
 - `js/session-timer.js`: Chat session timer.
 - `js/chat-flow.js`: Static chat interaction layer (quick replies, send, voice/image simulation, toasts).
+- `js/csv-mapping-ui.js`: CSV upload + column mapping UI and backend ingest integration.
 - `js/app-init.js`: Central startup/init wiring for all screen flows.
 - `backend/app/main.py`: FastAPI service with Epic OAuth callback and workflow APIs.
 - `backend/app/epic.py`: Epic OAuth/token/FHIR client helpers.
 - `backend/app/workflow.py`: Python adapter/normalizer/cache/prompt pipeline.
+- `backend/app/hl7_parser.py`: HL7 v2 segment parser + ACK builder.
+- `backend/app/hl7_mllp.py`: HL7 MLLP socket listener (optional service).
+- `backend/app/cda_parser.py`: CDA XML parser with configurable XPath map.
+- `backend/app/csv_mapper.py`: CSV text parser + mapping-to-context transformer.
 - `backend/app/oauth_state.py`: PKCE state store with TTL.
 - `backend/app/config.py`: Backend settings/env loading.
 - `backend/requirements.txt`: Python dependencies.

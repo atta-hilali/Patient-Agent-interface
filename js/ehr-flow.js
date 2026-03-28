@@ -3,7 +3,8 @@ const ehrNames = {
   epic: 'Epic MyChart',
   cerner: 'Cerner HealtheLife',
   veradigm: 'Veradigm',
-  athena: 'athenahealth'
+  athena: 'athenahealth',
+  csv: 'CSV / File import'
 };
 
 function selectEhr(id) {
@@ -52,6 +53,11 @@ async function doRedirect() {
     } catch (error) {
       if (text) text.textContent = error.message;
     }
+    return;
+  }
+
+  if (selectedEhr === 'csv') {
+    goTo('screen-csv-map');
     return;
   }
 

@@ -1,0 +1,125 @@
+.csv-wrap {
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--slate-bg);
+}
+
+.csv-card {
+  width: min(960px, 100%);
+  background: var(--white);
+  border: 1px solid var(--slate-line);
+  border-radius: var(--r16);
+  padding: 20px;
+  box-shadow: 0 22px 50px rgba(15, 23, 42, 0.08);
+}
+
+.csv-title {
+  font-family: var(--serif);
+  font-size: 28px;
+  margin-bottom: 6px;
+  color: var(--slate);
+}
+
+.csv-sub {
+  color: var(--slate-soft);
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+
+.csv-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.csv-btn,
+.csv-file-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r8);
+  border: 1px solid var(--slate-line);
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--white);
+  color: var(--slate);
+}
+
+.csv-btn.primary {
+  background: var(--teal-light);
+  color: var(--white);
+  border-color: var(--teal-light);
+}
+
+.csv-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.csv-file-label {
+  cursor: pointer;
+}
+
+.csv-file-name {
+  font-size: 12px;
+  color: var(--slate-soft);
+}
+
+.csv-preview-wrap {
+  border: 1px solid var(--slate-line);
+  border-radius: var(--r12);
+  overflow: auto;
+  max-height: 220px;
+  margin: 12px 0;
+}
+
+.csv-preview {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.csv-preview th,
+.csv-preview td {
+  border-bottom: 1px solid var(--slate-line);
+  padding: 8px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.csv-map-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.csv-map-item label {
+  display: block;
+  font-size: 12px;
+  color: var(--slate-soft);
+  margin-bottom: 4px;
+}
+
+.csv-map-item select,
+.csv-map-item input {
+  width: 100%;
+  border: 1px solid var(--slate-line);
+  border-radius: var(--r8);
+  padding: 8px;
+  font-size: 12px;
+  color: var(--slate);
+  background: var(--white);
+}
+
+.csv-status {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--slate-soft);
+}
