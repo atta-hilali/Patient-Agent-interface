@@ -10,7 +10,7 @@ const EPIC_CONFIG = Object.freeze({
   backendBaseUrl: 'https://patient-agent-interface.onrender.com',
   // Must exactly match a redirect URI registered in Epic (character-for-character).
   // Use your stable production hostname here (not window.location.origin, which can vary on preview/local URLs).
-  redirectUri: 'https://patient-agent-interface.vercel.app//callback.html',
+  redirectUri: 'https://patient-agent-interface.vercel.app/callback.html',
   authorizeUrl: 'https://fhir.epic.com/interconnect-fhir-oauth/oauth2/authorize',
   tokenUrl: 'https://fhir.epic.com/interconnect-fhir-oauth/oauth2/token',
   aud: 'https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4',
@@ -21,3 +21,5 @@ const EPIC_CONFIG = Object.freeze({
     'patient/*.read'
   ].join(' ')
 });
+
+window.EPIC_CONFIG = EPIC_CONFIG;
