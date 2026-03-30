@@ -41,37 +41,42 @@ def _build_headers(settings: Settings) -> dict[str, str]:
     return {header_name: token}
 
 
-def _extract_text(payload: Any) -> str:
+def _collect_text_fragments(payload: Any) -> list[str]:
+    fragments: list[str] = []
+
     if isinstance(payload, dict):
         for key in ("text", "transcript"):
             value = payload.get(key)
             if isinstance(value, str) and value.strip():
-                return value.strip()
+                fragments.append(value.strip())
 
-        for key in ("segments", "results", "data", "alternatives", "transcripts"):
-            items = payload.get(key)
-            if not isinstance(items, list):
-                continue
-            pieces: list[str] = []
-            for item in items:
-                if isinstance(item, dict):
-                    piece = item.get("text") or item.get("transcript")
-                    if isinstance(piece, str) and piece.strip():
-                        pieces.append(piece.strip())
-            if pieces:
-                return " ".join(pieces).strip()
+        for key in ("segments", "results", "data", "alternatives", "transcripts", "choices"):
+            nested = payload.get(key)
+            if isinstance(nested, (list, dict)):
+                fragments.extend(_collect_text_fragments(nested))
 
-    if isinstance(payload, list):
-        pieces: list[str] = []
+    elif isinstance(payload, list):
         for item in payload:
-            if isinstance(item, dict):
-                piece = item.get("text") or item.get("transcript")
-                if isinstance(piece, str) and piece.strip():
-                    pieces.append(piece.strip())
-        if pieces:
-            return " ".join(pieces).strip()
+            if isinstance(item, (list, dict)):
+                fragments.extend(_collect_text_fragments(item))
+            elif isinstance(item, str) and item.strip():
+                fragments.append(item.strip())
 
-    return ""
+    return fragments
+
+
+def _extract_text(payload: Any) -> str:
+    pieces = _collect_text_fragments(payload)
+    if not pieces:
+        return ""
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for piece in pieces:
+        if piece in seen:
+            continue
+        seen.add(piece)
+        deduped.append(piece)
+    return " ".join(deduped).strip()
 
 
 def _extract_language(payload: Any, fallback: str) -> str:
@@ -145,4 +150,3 @@ async def transcribe_audio(
         "language": request_language,
         "model": "",
     }
-
