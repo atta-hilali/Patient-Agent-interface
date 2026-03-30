@@ -23,6 +23,16 @@ function initChatFlow() {
   let recordTimer = null;
   let toastTimer = null;
   let safetyRequestInFlight = false;
+  let transcribeRequestInFlight = false;
+  const MAX_VOICE_CAPTURE_MS = 15000;
+  const recordingSession = {
+    stream: null,
+    audioContext: null,
+    sourceNode: null,
+    processorNode: null,
+    chunks: [],
+    sampleRate: 44100
+  };
 
   function getBackendBaseUrl() {
     return (window.EPIC_CONFIG?.backendBaseUrl || '').replace(/\/+$/, '');
@@ -42,6 +52,115 @@ function initChatFlow() {
     } catch {
       return null;
     }
+  }
+
+  function getAsrLanguage() {
+    return (window.EPIC_CONFIG?.asrLanguage || 'en-US').trim();
+  }
+
+  function writeAsciiString(view, offset, value) {
+    for (let i = 0; i < value.length; i += 1) {
+      view.setUint8(offset + i, value.charCodeAt(i));
+    }
+  }
+
+  function mergeFloatChunks(chunks) {
+    const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+    const merged = new Float32Array(totalLength);
+    let offset = 0;
+    chunks.forEach((chunk) => {
+      merged.set(chunk, offset);
+      offset += chunk.length;
+    });
+    return merged;
+  }
+
+  function encodeMonoWav(samples, sampleRate) {
+    const bytesPerSample = 2;
+    const numChannels = 1;
+    const blockAlign = numChannels * bytesPerSample;
+    const byteRate = sampleRate * blockAlign;
+    const dataSize = samples.length * bytesPerSample;
+    const buffer = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(buffer);
+
+    writeAsciiString(view, 0, 'RIFF');
+    view.setUint32(4, 36 + dataSize, true);
+    writeAsciiString(view, 8, 'WAVE');
+    writeAsciiString(view, 12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, byteRate, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, 16, true);
+    writeAsciiString(view, 36, 'data');
+    view.setUint32(40, dataSize, true);
+
+    let offset = 44;
+    for (let i = 0; i < samples.length; i += 1) {
+      const clamped = Math.max(-1, Math.min(1, samples[i]));
+      const pcm = clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff;
+      view.setInt16(offset, pcm, true);
+      offset += 2;
+    }
+
+    return new Blob([buffer], { type: 'audio/wav' });
+  }
+
+  function blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result !== 'string') {
+          reject(new Error('Unable to read audio payload.'));
+          return;
+        }
+        const parts = reader.result.split(',', 2);
+        resolve(parts.length === 2 ? parts[1] : reader.result);
+      };
+      reader.onerror = () => {
+        reject(new Error('Failed to read recorded audio.'));
+      };
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  async function transcribeWithBackend({ audioBase64, mimeType, fileName }) {
+    const baseUrl = getBackendBaseUrl();
+    if (!baseUrl) {
+      throw new Error('EPIC_CONFIG.backendBaseUrl is missing.');
+    }
+
+    const response = await fetch(`${baseUrl}/voice/transcribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        audioBase64,
+        mimeType,
+        language: getAsrLanguage(),
+        fileName
+      })
+    });
+
+    const bodyText = await response.text();
+    let body = {};
+    if (bodyText) {
+      try {
+        body = JSON.parse(bodyText);
+      } catch {
+        body = { detail: bodyText };
+      }
+    }
+
+    if (!response.ok) {
+      throw new Error(body?.detail || `Voice transcription failed (${response.status}).`);
+    }
+    if (!body?.text) {
+      throw new Error('ASR response did not include transcript text.');
+    }
+    return body.text;
   }
 
   function showToast(text) {
@@ -191,33 +310,132 @@ function initChatFlow() {
     }, 900);
   }
 
+  function releaseRecordingResources() {
+    if (recordingSession.processorNode) {
+      recordingSession.processorNode.disconnect();
+      recordingSession.processorNode.onaudioprocess = null;
+    }
+    if (recordingSession.sourceNode) {
+      recordingSession.sourceNode.disconnect();
+    }
+    if (recordingSession.stream) {
+      recordingSession.stream.getTracks().forEach((track) => track.stop());
+    }
+    if (recordingSession.audioContext) {
+      void recordingSession.audioContext.close().catch(() => {});
+    }
+
+    recordingSession.stream = null;
+    recordingSession.audioContext = null;
+    recordingSession.sourceNode = null;
+    recordingSession.processorNode = null;
+  }
+
   function stopRecording() {
     isRecording = false;
     micBtn.classList.remove('recording');
     if (recordTimer) clearTimeout(recordTimer);
     recordTimer = null;
+    recordingSession.chunks = [];
+    releaseRecordingResources();
   }
 
-  function toggleRecording() {
-    setMode('voice');
-    if (isRecording) {
-      stopRecording();
-      showToast('Voice capture stopped.');
-      return;
+  async function startRecording() {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error('Browser microphone API is not available.');
     }
+
+    const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextCtor) {
+      throw new Error('Web Audio API is not available in this browser.');
+    }
+
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const audioContext = new AudioContextCtor();
+    const sourceNode = audioContext.createMediaStreamSource(stream);
+    const processorNode = audioContext.createScriptProcessor(4096, 1, 1);
+
+    recordingSession.stream = stream;
+    recordingSession.audioContext = audioContext;
+    recordingSession.sourceNode = sourceNode;
+    recordingSession.processorNode = processorNode;
+    recordingSession.chunks = [];
+    recordingSession.sampleRate = audioContext.sampleRate || 44100;
+
+    processorNode.onaudioprocess = (event) => {
+      if (!isRecording) return;
+      const channelData = event.inputBuffer.getChannelData(0);
+      recordingSession.chunks.push(new Float32Array(channelData));
+    };
+
+    sourceNode.connect(processorNode);
+    processorNode.connect(audioContext.destination);
 
     isRecording = true;
     micBtn.classList.add('recording');
-    showToast('Listening...');
+    showToast('Listening... tap mic again to transcribe.');
 
+    if (recordTimer) clearTimeout(recordTimer);
     recordTimer = setTimeout(() => {
       if (!isRecording) return;
-      stopRecording();
-      input.value = 'What do my latest lab results mean?';
+      void stopRecordingAndTranscribe();
+    }, MAX_VOICE_CAPTURE_MS);
+  }
+
+  async function stopRecordingAndTranscribe() {
+    if (!isRecording || transcribeRequestInFlight) return;
+
+    isRecording = false;
+    micBtn.classList.remove('recording');
+    if (recordTimer) clearTimeout(recordTimer);
+    recordTimer = null;
+
+    const chunks = recordingSession.chunks.slice();
+    const sampleRate = recordingSession.sampleRate;
+    recordingSession.chunks = [];
+    releaseRecordingResources();
+
+    if (!chunks.length) {
+      showToast('No audio captured. Please try again.');
+      return;
+    }
+
+    transcribeRequestInFlight = true;
+    showToast('Transcribing voice...');
+
+    try {
+      const merged = mergeFloatChunks(chunks);
+      const wavBlob = encodeMonoWav(merged, sampleRate);
+      const audioBase64 = await blobToBase64(wavBlob);
+      const transcript = await transcribeWithBackend({
+        audioBase64,
+        mimeType: 'audio/wav',
+        fileName: `voice-${Date.now()}.wav`
+      });
+      input.value = transcript.trim();
       autoResize();
       updateSendState();
       showToast('Voice captured. You can edit then send.');
-    }, 1500);
+    } catch (error) {
+      showToast(error?.message || 'Voice transcription failed.');
+    } finally {
+      transcribeRequestInFlight = false;
+    }
+  }
+
+  async function toggleRecording() {
+    setMode('voice');
+    if (isRecording) {
+      await stopRecordingAndTranscribe();
+      return;
+    }
+
+    try {
+      await startRecording();
+    } catch (error) {
+      stopRecording();
+      showToast(error?.message || 'Unable to access microphone.');
+    }
   }
 
   sendBtn.addEventListener('click', () => {
@@ -265,7 +483,9 @@ function initChatFlow() {
     imageInput.value = '';
   });
 
-  micBtn.addEventListener('click', toggleRecording);
+  micBtn.addEventListener('click', () => {
+    void toggleRecording();
+  });
 
   recordBtn?.addEventListener('click', () => {
     const hidden = contextStrip?.classList.toggle('is-hidden');

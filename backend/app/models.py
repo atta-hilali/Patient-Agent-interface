@@ -198,6 +198,20 @@ class SafetyCheckResponse(BaseModel):
     matchedRules: list[SafetyRuleMatch] = Field(default_factory=list)
 
 
+class AsrTranscribeRequest(BaseModel):
+    audioBase64: str = Field(min_length=1)
+    mimeType: str = "audio/wav"
+    language: str = ""
+    fileName: str = "voice.wav"
+
+
+class AsrTranscribeResponse(BaseModel):
+    text: str
+    language: str
+    model: str = ""
+    source: str = "nvidia-asr-nim"
+
+
 class WorkflowUnlockRequest(BaseModel):
     sourceId: str = Field(min_length=1)
     patientId: str = Field(min_length=1)

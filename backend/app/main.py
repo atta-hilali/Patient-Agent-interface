@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from fastapi.responses import RedirectResponse
 
+from .asr import decode_base64_audio, transcribe_audio
 from .cache import WorkflowCache
 from .config import get_settings
 from .epic import (
@@ -16,6 +17,8 @@ from .epic import (
     sha256_base64url,
 )
 from .models import (
+    AsrTranscribeRequest,
+    AsrTranscribeResponse,
     CdaIngestRequest,
     CsvIngestRequest,
     Hl7IngestRequest,
@@ -101,7 +104,7 @@ async def root() -> dict[str, Any]:
     return {
         "ok": True,
         "service": settings.app_name,
-        "message": "Backend is running. Use /docs, /health, /auth/epic/start, /workflow/ingest, /workflow/ingest/csv.",
+        "message": "Backend is running. Use /docs, /health, /auth/epic/start, /workflow/ingest, /workflow/ingest/csv, /voice/transcribe.",
     }
 
 
@@ -113,6 +116,25 @@ async def favicon() -> Response:
 @app.get("/workflow/sources")
 async def workflow_sources() -> dict[str, Any]:
     return {"supportedSourceTypes": workflow_service.adapter_registry.supported_source_types()}
+
+
+@app.get("/cache/status")
+async def cache_status() -> dict[str, Any]:
+    redis_reachable = False
+    redis_error = ""
+    try:
+        redis_reachable = await workflow_cache.ping()
+    except Exception as exc:  # noqa: BLE001
+        redis_error = str(exc)
+
+    return {
+        "redisRequired": settings.redis_required,
+        "redisConfigured": bool(settings.redis_url),
+        "redisReachable": redis_reachable,
+        "redisError": redis_error,
+        "cacheKeyPrefix": settings.workflow_cache_key_prefix,
+        "ttlSeconds": settings.workflow_cache_ttl_sec,
+    }
 
 
 @app.get("/hl7/mllp/status")
@@ -279,6 +301,33 @@ async def chat_preflight(request: SafetyCheckRequest) -> dict[str, Any]:
         pain_threshold=settings.preflight_pain_threshold,
     )
     return result.model_dump(mode="json")
+
+
+@app.post("/voice/transcribe")
+async def voice_transcribe(request: AsrTranscribeRequest) -> dict[str, Any]:
+    try:
+        audio_bytes = decode_base64_audio(request.audioBase64)
+        asr_result = await transcribe_audio(
+            settings=settings,
+            audio_bytes=audio_bytes,
+            mime_type=request.mimeType,
+            file_name=request.fileName,
+            language=request.language,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except httpx.HTTPStatusError as exc:
+        detail = exc.response.text if exc.response is not None else str(exc)
+        raise HTTPException(status_code=502, detail=f"ASR upstream error: {detail}") from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"ASR transcription failed: {exc}") from exc
+
+    response = AsrTranscribeResponse(
+        text=asr_result["text"],
+        language=asr_result["language"],
+        model=asr_result["model"],
+    )
+    return response.model_dump(mode="json")
 
 
 @app.post("/workflow/unlock-check")

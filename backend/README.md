@@ -19,6 +19,7 @@ Copy `.env.example` to `.env` and set:
 - `REDIS_URL` and `REDIS_REQUIRED=true` for Redis-only mode
 - set `CONTEXT_ENCRYPTION_KEY` in production
 - optional HL7 listener vars (`HL7_MLLP_*`)
+- optional ASR vars for NVIDIA NIM (`ASR_*`)
 
 ## 2. Run
 
@@ -41,6 +42,7 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 - `POST /workflow/ingest/cda` (CDA XML + optional XPath map)
 - `POST /workflow/ingest/csv` (CSV text + mapping object)
 - `POST /chat/preflight` (safety gate)
+- `POST /voice/transcribe` (base64 audio -> ASR NIM transcript)
 - `POST /workflow/unlock-check`
 
 ## 4. Workflow architecture
@@ -63,8 +65,33 @@ In `js/epic-config.js`:
 - `authMode: "backend"` to force backend
 - `authMode: "hybrid"` to try backend then fallback to browser
 - `backendBaseUrl: "http://127.0.0.1:8000"`
+- optional `asrLanguage: "en-US"`
 
-## 6. Render deployment (production)
+## 6. ASR NIM (voice input)
+
+Set these environment variables in backend deployment:
+
+- `ASR_BASE_URL` (example: `http://<dgx-host>:9000`)
+- `ASR_TRANSCRIBE_PATH` (default: `/v1/audio/transcriptions`)
+- `ASR_DEFAULT_LANGUAGE` (default: `en-US`)
+- `ASR_TIMEOUT_SEC` (default: `60`)
+- `ASR_VERIFY_TLS` (`true` for HTTPS with trusted cert, `false` for self-signed lab setup)
+- optional auth: `ASR_AUTH_HEADER`, `ASR_AUTH_TOKEN`
+
+Quick health check:
+
+```powershell
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/health"
+```
+
+Quick ASR check from browser app:
+
+- Open app chat screen
+- Click microphone
+- Speak
+- Click microphone again to stop and transcribe
+
+## 7. Render deployment (production)
 
 Use these exact settings for a monorepo where backend lives in `backend/`:
 

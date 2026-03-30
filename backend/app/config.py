@@ -68,6 +68,14 @@ class Settings:
     consent_session_ttl_sec: int
     preflight_pain_threshold: int
 
+    asr_base_url: str
+    asr_transcribe_path: str
+    asr_default_language: str
+    asr_timeout_sec: int
+    asr_auth_header: str
+    asr_auth_token: str
+    asr_verify_tls: bool
+
 
 def _default_fernet_key() -> str:
     # If operator does not set a key yet, this keeps local development running.
@@ -113,4 +121,11 @@ def get_settings() -> Settings:
         consent_required=_as_bool(os.getenv("CONSENT_REQUIRED"), True),
         consent_session_ttl_sec=_as_int(os.getenv("CONSENT_SESSION_TTL_SEC"), 3600),
         preflight_pain_threshold=_as_int(os.getenv("PREFLIGHT_PAIN_THRESHOLD"), 7),
+        asr_base_url=_clean_string(os.getenv("ASR_BASE_URL", "")),
+        asr_transcribe_path=_clean_string(os.getenv("ASR_TRANSCRIBE_PATH", "/v1/audio/transcriptions")),
+        asr_default_language=_clean_string(os.getenv("ASR_DEFAULT_LANGUAGE", "en-US")),
+        asr_timeout_sec=_as_int(os.getenv("ASR_TIMEOUT_SEC"), 60),
+        asr_auth_header=_clean_string(os.getenv("ASR_AUTH_HEADER", "Authorization")),
+        asr_auth_token=_clean_string(os.getenv("ASR_AUTH_TOKEN", "")),
+        asr_verify_tls=_as_bool(os.getenv("ASR_VERIFY_TLS"), True),
     )

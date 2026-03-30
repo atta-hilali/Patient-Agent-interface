@@ -8,6 +8,8 @@ const EPIC_CONFIG = Object.freeze({
   authMode: 'backend',
   // Python backend base URL (FastAPI). Keep same-origin if using reverse proxy.
   backendBaseUrl: 'https://patient-agent-interface.onrender.com',
+  // Preferred ASR language passed to backend /voice/transcribe.
+  asrLanguage: 'en-US',
   // Must exactly match a redirect URI registered in Epic (character-for-character).
   // Use your stable production hostname here (not window.location.origin, which can vary on preview/local URLs).
   redirectUri: 'https://patient-agent-interface.vercel.app/callback.html',
