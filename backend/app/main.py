@@ -1,4 +1,7 @@
+import asyncio
+import socket
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 from fastapi import FastAPI, HTTPException, Query
@@ -104,7 +107,7 @@ async def root() -> dict[str, Any]:
     return {
         "ok": True,
         "service": settings.app_name,
-        "message": "Backend is running. Use /docs, /health, /auth/epic/start, /workflow/ingest, /workflow/ingest/csv, /voice/transcribe.",
+        "message": "Backend is running. Use /docs, /health, /auth/epic/start, /workflow/ingest, /workflow/ingest/csv, /voice/asr/probe, /voice/transcribe.",
     }
 
 
@@ -301,6 +304,74 @@ async def chat_preflight(request: SafetyCheckRequest) -> dict[str, Any]:
         pain_threshold=settings.preflight_pain_threshold,
     )
     return result.model_dump(mode="json")
+
+
+@app.get("/voice/asr/probe")
+async def voice_asr_probe() -> dict[str, Any]:
+    if not settings.asr_base_url:
+        raise HTTPException(status_code=500, detail="ASR_BASE_URL is not configured.")
+
+    parsed = urlparse(settings.asr_base_url)
+    host = parsed.hostname or ""
+    scheme = parsed.scheme or "http"
+    port = parsed.port or (443 if scheme == "https" else 80)
+
+    dns_resolved = False
+    tcp_reachable = False
+    http_reachable = False
+    http_status = 0
+    errors: list[str] = []
+
+    try:
+        loop = asyncio.get_running_loop()
+        await loop.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
+        dns_resolved = True
+    except Exception as exc:  # noqa: BLE001
+        errors.append(f"dns:{exc}")
+
+    if dns_resolved:
+        try:
+            reader, writer = await asyncio.wait_for(asyncio.open_connection(host, port), timeout=5.0)
+            writer.close()
+            await writer.wait_closed()
+            tcp_reachable = True
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"tcp:{exc}")
+
+    headers: dict[str, str] = {}
+    if settings.asr_auth_token:
+        token = settings.asr_auth_token
+        if settings.asr_auth_header.lower() == "authorization" and not token.lower().startswith("bearer "):
+            token = f"Bearer {token}"
+        headers[settings.asr_auth_header] = token
+
+    health_path = settings.asr_health_path or "/v1/health/ready"
+    if not health_path.startswith("/"):
+        health_path = f"/{health_path}"
+    health_url = f"{settings.asr_base_url.rstrip('/')}{health_path}"
+
+    try:
+        timeout = httpx.Timeout(float(max(settings.asr_timeout_sec, 1)))
+        async with httpx.AsyncClient(timeout=timeout, verify=settings.asr_verify_tls) as client:
+            response = await client.get(health_url, headers=headers)
+        http_status = response.status_code
+        http_reachable = True
+    except Exception as exc:  # noqa: BLE001
+        errors.append(f"http:{exc}")
+
+    return {
+        "configured": True,
+        "baseUrl": settings.asr_base_url,
+        "healthUrl": health_url,
+        "verifyTls": settings.asr_verify_tls,
+        "host": host,
+        "port": port,
+        "dnsResolved": dns_resolved,
+        "tcpReachable": tcp_reachable,
+        "httpReachable": http_reachable,
+        "httpStatus": http_status,
+        "errors": errors,
+    }
 
 
 @app.post("/voice/transcribe")

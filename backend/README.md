@@ -42,6 +42,7 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 - `POST /workflow/ingest/cda` (CDA XML + optional XPath map)
 - `POST /workflow/ingest/csv` (CSV text + mapping object)
 - `POST /chat/preflight` (safety gate)
+- `GET /voice/asr/probe` (Render-side DNS/TCP/HTTP reachability check to ASR)
 - `POST /voice/transcribe` (base64 audio -> ASR NIM transcript)
 - `POST /workflow/unlock-check`
 
@@ -72,6 +73,7 @@ In `js/epic-config.js`:
 Set these environment variables in backend deployment:
 
 - `ASR_BASE_URL` (example: `http://<dgx-host>:9000`)
+- `ASR_HEALTH_PATH` (default: `/v1/health/ready`)
 - `ASR_TRANSCRIBE_PATH` (default: `/v1/audio/transcriptions`)
 - `ASR_DEFAULT_LANGUAGE` (default: `en-US`)
 - `ASR_TIMEOUT_SEC` (default: `60`)

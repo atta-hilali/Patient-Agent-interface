@@ -69,6 +69,7 @@ class Settings:
     preflight_pain_threshold: int
 
     asr_base_url: str
+    asr_health_path: str
     asr_transcribe_path: str
     asr_default_language: str
     asr_timeout_sec: int
@@ -122,6 +123,7 @@ def get_settings() -> Settings:
         consent_session_ttl_sec=_as_int(os.getenv("CONSENT_SESSION_TTL_SEC"), 3600),
         preflight_pain_threshold=_as_int(os.getenv("PREFLIGHT_PAIN_THRESHOLD"), 7),
         asr_base_url=_clean_string(os.getenv("ASR_BASE_URL", "")),
+        asr_health_path=_clean_string(os.getenv("ASR_HEALTH_PATH", "/v1/health/ready")),
         asr_transcribe_path=_clean_string(os.getenv("ASR_TRANSCRIBE_PATH", "/v1/audio/transcriptions")),
         asr_default_language=_clean_string(os.getenv("ASR_DEFAULT_LANGUAGE", "en-US")),
         asr_timeout_sec=_as_int(os.getenv("ASR_TIMEOUT_SEC"), 60),
