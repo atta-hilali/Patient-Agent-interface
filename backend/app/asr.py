@@ -41,19 +41,40 @@ def _build_headers(settings: Settings) -> dict[str, str]:
     return {header_name: token}
 
 
+TEXT_KEYS = {
+    "text",
+    "transcript",
+    "utterance",
+    "prediction",
+    "pred_text",
+    "normalized_text",
+    "display_text",
+    "result",
+}
+
+
+def _key_looks_like_text(key: str) -> bool:
+    lowered = (key or "").strip().lower()
+    if lowered in TEXT_KEYS:
+        return True
+    if "transcript" in lowered:
+        return True
+    if lowered.endswith("text"):
+        return True
+    return False
+
+
 def _collect_text_fragments(payload: Any) -> list[str]:
     fragments: list[str] = []
 
     if isinstance(payload, dict):
-        for key in ("text", "transcript"):
-            value = payload.get(key)
-            if isinstance(value, str) and value.strip():
+        for key, value in payload.items():
+            if isinstance(value, str) and value.strip() and _key_looks_like_text(key):
                 fragments.append(value.strip())
+                continue
 
-        for key in ("segments", "results", "data", "alternatives", "transcripts", "choices"):
-            nested = payload.get(key)
-            if isinstance(nested, (list, dict)):
-                fragments.extend(_collect_text_fragments(nested))
+            if isinstance(value, (list, dict)):
+                fragments.extend(_collect_text_fragments(value))
 
     elif isinstance(payload, list):
         for item in payload:
@@ -135,6 +156,9 @@ async def transcribe_audio(
         payload: Any = response.json()
         transcript = _extract_text(payload)
         if not transcript:
+            if isinstance(payload, dict):
+                keys = ", ".join(sorted(str(key) for key in payload.keys()))
+                raise RuntimeError(f"ASR response did not contain transcript text. Top-level keys: {keys}")
             raise RuntimeError("ASR response did not contain transcript text.")
         return {
             "text": transcript,

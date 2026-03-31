@@ -1,6 +1,7 @@
 # Veldooc Python Backend (FastAPI)
 
 This backend moves sensitive Epic OAuth/token/FHIR logic out of the browser.
+For DGX operations, see `backend/DGX_RUNBOOK.md`.
 
 ## 1. Setup
 
