@@ -1,0 +1,27 @@
+allowed_topics:
+  - medication_explanation
+  - lab_result_explanation
+  - appointment_preparation
+  - care_plan_clarification
+  - symptom_reporting
+  - general_health_education
+  - chronic_condition_self_management
+  - preventive_care_education
+  - discharge_instruction_clarification
+
+blocked_topics:
+  - diagnosis
+  - prescribing
+  - dosage_change
+  - emergency_assessment
+  - mental_health_therapy
+  - procedural_clearance
+  - specialist_triage_decision
+
+escalation_triggers:
+  - pain_score_gte_7
+  - crisis_language
+  - explicit_human_request
+  - chest_pain
+  - shortness_of_breath
+  - allergic_reaction_language

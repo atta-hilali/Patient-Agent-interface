@@ -66,6 +66,15 @@ class ConnectorStore:
                     fresh[cfg.clinic_id] = cfg
             self._cache = fresh
 
+    def _save_to_disk(self) -> None:
+        path = Path(self.settings.connectors_file)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        data = [
+            config.model_dump(mode="json")
+            for _, config in sorted(self._cache.items(), key=lambda item: item[0])
+        ]
+        path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
     async def refresh_loop(self) -> None:
         while True:
             await asyncio.sleep(300)
@@ -90,6 +99,24 @@ class ConnectorStore:
         if not cfg:
             raise HTTPException(status_code=404, detail="Clinic not found")
         return cfg
+
+    async def update_topic_yaml(self, clinic_id: str, topic_yaml: str, specialty: str | None = None) -> ConnectorConfig:
+        normalized = (clinic_id or "").strip()
+        if not normalized:
+            raise HTTPException(status_code=400, detail="clinic_id is required")
+        async with self._lock:
+            cfg = self._cache.get(normalized)
+            if not cfg:
+                raise HTTPException(status_code=404, detail="Clinic not found")
+            updated = cfg.model_copy(
+                update={
+                    "topic_yaml": topic_yaml,
+                    "specialty": specialty if specialty is not None else cfg.specialty,
+                }
+            )
+            self._cache[normalized] = updated
+            self._save_to_disk()
+            return updated
 
 
 internal_key_header = APIKeyHeader(name="X-Internal-Key", auto_error=False)

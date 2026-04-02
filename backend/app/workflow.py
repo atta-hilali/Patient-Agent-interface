@@ -208,3 +208,21 @@ async def run_workflow_pipeline(
         session_id=session_id,
         session_cache=session_cache,
     )
+
+
+async def prefill_kv_cache(system_prompt: str):
+    """Fire silent POST to vLLM to warm the KV-cache for this session."""
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            await client.post('http://localhost:8001/v1/chat/completions', json={
+                'model': 'google/medgemma-4b-it',
+                'messages': [
+                    {'role': 'system', 'content': system_prompt},
+                    {'role': 'user',   'content': ''},  # empty user turn = prefill only
+                ],
+                'max_tokens': 1,
+                'temperature': 0.1,
+            })
+    except Exception:
+        pass  # prefill failure is non-fatal — next turn just won't have cache benefit

@@ -1,0 +1,31 @@
+allowed_topics:
+  - medication_explanation
+  - lab_result_explanation
+  - appointment_preparation
+  - care_plan_clarification
+  - symptom_reporting
+  - chemotherapy_supportive_care_education
+  - radiation_preparation_education
+  - infusion_visit_preparation
+  - neutropenia_precaution_education
+  - survivorship_plan_clarification
+
+blocked_topics:
+  - diagnosis
+  - prescribing
+  - dosage_change
+  - emergency_assessment
+  - treatment_selection
+  - prognosis_estimation
+  - recurrence_assessment
+  - staging_interpretation
+  - trial_recommendation
+
+escalation_triggers:
+  - pain_score_gte_7
+  - crisis_language
+  - explicit_human_request
+  - fever_while_on_treatment
+  - uncontrolled_nausea_vomiting
+  - bleeding_while_on_treatment
+  - neutropenia_infection_language

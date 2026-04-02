@@ -25,6 +25,31 @@ Copy `.env.example` to `.env` and set:
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
+### MedGemma / vLLM
+
+MVP uses MedGemma 4B by default for faster iteration. Sprint 3 / larger deployments can switch to MedGemma 27B.
+
+Example MVP vLLM command:
+
+```powershell
+vllm serve google/medgemma-4b-it --max-model-len 8192 --enable-chunked-prefill --dtype bfloat16 --port 8001
+```
+
+Example Sprint 3 command:
+
+```powershell
+vllm serve google/medgemma-27b-it --tensor-parallel-size 2 --max-model-len 8192 --enable-chunked-prefill --dtype bfloat16 --port 8001
+```
+
+Optional environment variables:
+
+- `MEDGEMMA_BASE_URL`
+- `MEDGEMMA_API_KEY`
+- `MEDGEMMA_MODE` with `mvp` or `sprint3`
+- `MEDGEMMA_MVP_MODEL`
+- `MEDGEMMA_SPRINT3_MODEL`
+- `MEDGEMMA_MAX_TOKENS`
+
 ## 3. Endpoints
 
 - `GET /health`

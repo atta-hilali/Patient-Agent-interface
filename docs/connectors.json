@@ -5,9 +5,9 @@
     "base_url": "https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4",
     "auth_method": "smart_pkce",
     "client_id": "",
-    "topic_yaml": "default",
+    "topic_yaml": "general_medicine",
     "write_back": "fhir",
-    "specialty": "general",
+    "specialty": "general_medicine",
     "cache_ttl_s": 300,
     "active": true
   }

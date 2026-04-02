@@ -1,0 +1,30 @@
+allowed_topics:
+  - medication_explanation
+  - lab_result_explanation
+  - appointment_preparation
+  - care_plan_clarification
+  - heart_health_education
+  - symptom_reporting
+  - blood_pressure_tracking
+  - heart_failure_self_management
+  - anticoagulation_education
+  - cardiac_test_preparation
+
+blocked_topics:
+  - diagnosis
+  - prescribing
+  - dosage_change
+  - emergency_assessment
+  - surgery_recommendation
+  - rhythm_interpretation
+  - acute_coronary_syndrome_assessment
+  - post_procedure_clearance
+
+escalation_triggers:
+  - chest_pain
+  - pain_score_gte_7
+  - crisis_language
+  - syncope_or_near_syncope
+  - palpitations_with_dizziness
+  - new_shortness_of_breath
+  - rapid_weight_gain

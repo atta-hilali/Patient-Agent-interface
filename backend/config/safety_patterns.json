@@ -1,0 +1,50 @@
+{
+  "crisis": {
+    "patterns": [
+      "chest.?pain",
+      "can.?t.?breathe",
+      "cannot.?breathe",
+      "suicid",
+      "kill.?myself",
+      "end.?my.?life",
+      "heart.?attack",
+      "stroke",
+      "overdos",
+      "\\b911\\b",
+      "emergency",
+      "unconscious",
+      "can.?t.?go.?on",
+      "dying",
+      "hurt.?myself"
+    ],
+    "severity": "HIGH",
+    "action": "hard_stop",
+    "message_key": "crisis_escalation"
+  },
+  "pain_score": {
+    "patterns": [
+      "\\b([7-9]|10)\\s*(out of|/|over)\\s*10\\b",
+      "\\bpain\\s*(is\\s*a?\\s*)?([7-9]|10)\\b",
+      "unbearable pain",
+      "excruciating",
+      "worst pain ever"
+    ],
+    "severity": "HIGH",
+    "action": "hard_stop",
+    "message_key": "pain_escalation"
+  },
+  "medication_change": {
+    "patterns": [
+      "stop.?taking",
+      "change.?my.?dose",
+      "double.?my",
+      "take.?more.?than",
+      "skip.?my.?medication",
+      "can.?i.?stop",
+      "should.?i.?stop"
+    ],
+    "severity": "HIGH",
+    "action": "hard_stop",
+    "message_key": "medication_change_blocked"
+  }
+}

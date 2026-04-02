@@ -31,6 +31,13 @@ class MedicationItem(BaseModel):
     name: str = ""
     status: str = ""
     dosage: str = ""
+    dose: str = ""
+    frequency: str = ""
+    indication: str = ""
+    generic: str = ""
+    rxcui: str = ""
+    prescriber: str = ""
+    source: str = "ehr"
     startDate: str = ""
     endDate: str = ""
     route: str = ""
@@ -63,6 +70,7 @@ class LabItem(BaseModel):
     name: str = ""
     value: str = ""
     unit: str = ""
+    referenceRange: str = ""
     interpretation: str = ""
     status: str = ""
     effectiveDate: str = ""
@@ -76,6 +84,8 @@ class AppointmentItem(BaseModel):
     start: str = ""
     end: str = ""
     location: str = ""
+    provider: str = ""
+    specialty: str = ""
     citations: list[Citation] = Field(default_factory=list)
 
 
@@ -84,6 +94,7 @@ class CarePlanItem(BaseModel):
     title: str = ""
     status: str = ""
     description: str = ""
+    instruction: str = ""
     start: str = ""
     end: str = ""
     citations: list[Citation] = Field(default_factory=list)
@@ -96,6 +107,7 @@ class DocumentItem(BaseModel):
     date: str = ""
     author: str = ""
     url: str = ""
+    summary: str = ""
     citations: list[Citation] = Field(default_factory=list)
 
 
@@ -112,6 +124,7 @@ class AuthToken(BaseModel):
     access_token: str
     refresh_token: str | None = None
     patient_id: str
+    clinic_id: str = ""
     expiry: str
     scope_list: list[str] = Field(default_factory=list)
     adapter_type: str = ""

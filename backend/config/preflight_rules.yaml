@@ -1,0 +1,72 @@
+crisis_keywords:
+  - "chest.?pain"
+  - "can.?t.?breathe"
+  - "cannot.?breathe"
+  - "suicidal"
+  - "kill.?myself"
+  - "heart.?attack"
+  - "stroke"
+  - "severe.?pain"
+  - "emergency"
+  - "call.?911"
+  - "overdose"
+  - "unconscious"
+  - "bleeding.?a.?lot"
+  - "a lot of bleeding"
+  - "passing.?out"
+  - "pass out"
+  - "fainted"
+
+medication_change_keywords:
+  - "stop.?taking"
+  - "change.?my.?dose"
+  - "double.?my"
+  - "take.?more.?than"
+  - "skip.?my.?medication"
+  - "can.?i.?stop"
+  - "should.?i.?stop"
+  - "increase.?my.?dose"
+  - "decrease.?my.?dose"
+  - "change.?my.?medication"
+
+specialty_overrides:
+  general_medicine:
+    crisis_keywords:
+      - "short.?of.?breath"
+      - "anaphylaxis"
+    medication_change_keywords:
+      - "should.?i.?change.?my.?medication"
+  cardiology:
+    crisis_keywords:
+      - "palpitations.?with.?dizziness"
+      - "passing.?out"
+      - "new.?shortness.?of.?breath"
+      - "rapid.?weight.?gain"
+    medication_change_keywords:
+      - "double.?my.?blood.?pressure.?medication"
+      - "stop.?my.?heart.?medication"
+  psychiatry:
+    crisis_keywords:
+      - "self.?harm"
+      - "hurt.?myself"
+      - "homicidal"
+      - "voices.?telling.?me"
+    medication_change_keywords:
+      - "stop.?my.?psychiatric.?medication"
+      - "change.?my.?antidepressant.?dose"
+  dermatology:
+    crisis_keywords:
+      - "rapidly.?spreading.?rash"
+      - "facial.?swelling"
+      - "skin.?turning.?black"
+    medication_change_keywords:
+      - "use.?more.?than.?prescribed.?cream"
+      - "stop.?my.?steroid.?cream"
+  oncology:
+    crisis_keywords:
+      - "fever.?while.?on.?treatment"
+      - "bleeding.?while.?on.?treatment"
+      - "uncontrolled.?vomiting"
+    medication_change_keywords:
+      - "skip.?my.?chemo.?medication"
+      - "change.?my.?cancer.?medication.?dose"

@@ -2,6 +2,14 @@ fastapi==0.116.1
 uvicorn[standard]==0.35.0
 httpx==0.28.1
 pydantic==2.11.7
+python-multipart>=0.0.9
 python-dotenv==1.1.1
 cryptography==45.0.6
 redis==5.2.1
+langgraph>=0.2.0
+langchain-core>=0.2.0
+openai>=1.35.0
+asyncpg>=0.29.0
+PyYAML>=6.0.2
+grpcio>=1.66.0
+nvidia-riva-client>=2.18.0

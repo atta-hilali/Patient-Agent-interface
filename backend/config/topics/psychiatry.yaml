@@ -1,0 +1,29 @@
+allowed_topics:
+  - medication_explanation
+  - appointment_preparation
+  - care_plan_clarification
+  - symptom_reporting
+  - general_health_education
+  - medication_side_effect_education
+  - coping_plan_reminder
+  - crisis_resource_reminder
+  - sleep_hygiene_education
+
+blocked_topics:
+  - diagnosis
+  - prescribing
+  - dosage_change
+  - emergency_assessment
+  - psychotherapy
+  - trauma_processing
+  - suicide_risk_assessment
+  - involuntary_treatment_guidance
+
+escalation_triggers:
+  - suicidal_language
+  - crisis_language
+  - explicit_human_request
+  - homicidal_language
+  - self_harm_language
+  - command_hallucination_language
+  - severe_agitation

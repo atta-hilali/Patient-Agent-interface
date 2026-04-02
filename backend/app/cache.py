@@ -130,3 +130,49 @@ class WorkflowCache:
 
         self._cleanup_memory()
         return key in self._memory
+    
+
+    # These bridge the pipeline's expected API to SessionCache
+
+_session_cache_instance = None
+
+def get_session_cache():
+    global _session_cache_instance
+    if _session_cache_instance is None:
+        from app.config import get_settings
+        from app.session_cache import SessionCache
+        _session_cache_instance = SessionCache(get_settings())
+    return _session_cache_instance
+
+async def read_context(session_id: str, patient_id: str):
+    """Read PatientContext from session cache."""
+    raw = await get_session_cache().get_context(session_id, patient_id)
+    if not raw:
+        return None
+    from app.models import PatientContext
+    return PatientContext.model_validate(raw)
+
+async def read_prompt(session_id: str) -> str | None:
+    """Read system prompt from session cache."""
+    return await get_session_cache().get_prompt(session_id)
+
+
+async def read_token(session_id: str):
+    """Read AuthToken from session cache."""
+    raw = await get_session_cache().get_token(session_id)
+    if not raw:
+        return None
+    from app.models import AuthToken
+    return AuthToken.model_validate(raw)
+
+
+async def read_context_for_session(session_id: str):
+    token = await read_token(session_id)
+    if not token:
+        return None
+    return await read_context(session_id, token.patient_id)
+
+
+async def read_patient_id_for_session(session_id: str) -> str | None:
+    token = await read_token(session_id)
+    return token.patient_id if token else None

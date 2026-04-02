@@ -1,0 +1,29 @@
+allowed_topics:
+  - medication_explanation
+  - appointment_preparation
+  - care_plan_clarification
+  - symptom_reporting
+  - image_review_support
+  - skin_care_education
+  - wound_care_instruction_clarification
+  - rash_monitoring_guidance
+  - biopsy_aftercare_clarification
+
+blocked_topics:
+  - diagnosis
+  - prescribing
+  - dosage_change
+  - emergency_assessment
+  - procedure_recommendation
+  - melanoma_assessment
+  - infection_severity_assessment
+  - pathology_interpretation_finality
+
+escalation_triggers:
+  - pain_score_gte_7
+  - infection_language
+  - explicit_human_request
+  - rapidly_spreading_rash
+  - facial_swelling
+  - skin_necrosis_language
+  - wound_dehiscence_language

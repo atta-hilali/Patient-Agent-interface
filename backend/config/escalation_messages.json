@@ -1,0 +1,82 @@
+{
+  "crisis_escalation": {
+    "text": "I am concerned about what you have shared. I am connecting you with your care team right now.",
+    "voice": true
+  },
+  "pain_escalation": {
+    "text": "I am concerned about your pain level. I am connecting you with your care team immediately.",
+    "voice": true
+  },
+  "medication_change_blocked": {
+    "text": "I cannot advise on changing your medication. Please contact your prescriber directly.",
+    "voice": true
+  },
+  "allergy_in_input": {
+    "text": "I noticed something related to a documented allergy. I am flagging this for your care team.",
+    "voice": true
+  },
+  "topic_control_input": {
+    "text": "That question is something your care team needs to assess directly. Can I help you with something else about your current record?",
+    "voice": true
+  },
+  "content_safety_general": {
+    "text": "I cannot share that safely. I am connecting you with your care team now.",
+    "voice": true
+  },
+  "content_safety_self_harm": {
+    "text": "I am concerned by what was generated. I am connecting you with your care team right now.",
+    "voice": true
+  },
+  "content_safety_crisis_language": {
+    "text": "I am concerned by this response and I am escalating it to your care team now.",
+    "voice": true
+  },
+  "content_safety_graphic_content": {
+    "text": "I cannot share that response safely. I am escalating this conversation to your care team.",
+    "voice": true
+  },
+  "content_safety_phi_leakage": {
+    "text": "I cannot safely share that response. I am escalating this to your care team.",
+    "voice": true
+  },
+  "content_safety_allergy_conflict": {
+    "text": "I cannot share advice that may conflict with your recorded allergies. I am notifying your care team.",
+    "voice": true
+  },
+  "topic_control_general": {
+    "text": "For that topic, please speak directly with your care team.",
+    "voice": true
+  },
+  "topic_control_diagnosis": {
+    "text": "I cannot diagnose new conditions. Please speak directly with your clinician.",
+    "voice": true
+  },
+  "topic_control_prescribing": {
+    "text": "I cannot make prescribing recommendations. Please contact your prescriber.",
+    "voice": true
+  },
+  "topic_control_dosage_change": {
+    "text": "I cannot recommend changing your dose. Please contact your prescriber directly.",
+    "voice": true
+  },
+  "topic_control_emergency_assessment": {
+    "text": "I cannot assess emergencies here. Please seek urgent care or contact your care team immediately.",
+    "voice": true
+  },
+  "topic_control_mental_health_therapy": {
+    "text": "That request needs direct support from a qualified clinician. Please contact your care team.",
+    "voice": true
+  },
+  "nemoguard_output_unreachable": {
+    "text": "I cannot safely deliver a response right now. I am connecting you with your care team.",
+    "voice": true
+  },
+  "nemoguard_input_blocked": {
+    "text": "I am not able to process that request safely. Please contact your care team.",
+    "voice": true
+  },
+  "general_escalation": {
+    "text": "I am connecting you with your care team. Please hold.",
+    "voice": true
+  }
+}
