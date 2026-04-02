@@ -2,7 +2,8 @@ const EHR_SOURCE_TYPE_MAP = Object.freeze({
   epic: 'fhir',
   cerner: 'fhir',
   veradigm: 'rest',
-  athena: 'cda'
+  athena: 'cda',
+  csv: 'csv'
 });
 
 function getSourceTypeFromEhrId(ehrId) {

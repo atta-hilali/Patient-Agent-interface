@@ -160,6 +160,29 @@ class NormalizeRequest(WorkflowIngestRequest):
     pass
 
 
+class Hl7IngestRequest(BaseModel):
+    sourceId: str = "hl7-mllp"
+    patientId: str = ""
+    hl7Message: str = Field(min_length=1)
+    consentAccepted: bool = False
+
+
+class CdaIngestRequest(BaseModel):
+    sourceId: str = "cda-upload"
+    patientId: str = ""
+    cdaXml: str = Field(min_length=1)
+    xpathMap: dict[str, str] = Field(default_factory=dict)
+    consentAccepted: bool = False
+
+
+class CsvIngestRequest(BaseModel):
+    sourceId: str = "csv-upload"
+    patientId: str = ""
+    csvText: str = Field(min_length=1)
+    mapping: dict[str, str] = Field(default_factory=dict)
+    consentAccepted: bool = False
+
+
 class WorkflowSnapshot(BaseModel):
     updatedAt: str
     sourceType: str
@@ -195,6 +218,20 @@ class SafetyCheckResponse(BaseModel):
     decision: str
     reason: str
     matchedRules: list[SafetyRuleMatch] = Field(default_factory=list)
+
+
+class AsrTranscribeRequest(BaseModel):
+    audioBase64: str = Field(min_length=1)
+    mimeType: str = "audio/wav"
+    language: str = ""
+    fileName: str = "voice.wav"
+
+
+class AsrTranscribeResponse(BaseModel):
+    text: str
+    language: str
+    model: str = ""
+    source: str = "nvidia-asr-nim"
 
 
 class WorkflowUnlockRequest(BaseModel):

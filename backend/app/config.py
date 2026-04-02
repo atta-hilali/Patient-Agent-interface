@@ -21,8 +21,21 @@ def _parse_origins(raw: str | None) -> list[str]:
     if not raw:
         # return []
         return []
+<<<<<<< HEAD
     # return [item.strip() for item in raw.split(",") if item.strip()]
     return [item.strip() for item in raw.split(",") if item.strip()]
+=======
+    return [_clean_string(item) for item in raw.split(",") if _clean_string(item)]
+
+
+def _clean_string(raw: str | None) -> str:
+    if raw is None:
+        return ""
+    value = raw.strip()
+    if len(value) >= 2 and ((value[0] == value[-1] == "'") or (value[0] == value[-1] == '"')):
+        value = value[1:-1].strip()
+    return value
+>>>>>>> 8cef2868d3614e914651eb0379e3ae5755bfab2f
 
 
 # def _as_bool(raw: str | None, default: bool) -> bool:
@@ -78,7 +91,11 @@ class Settings:
 
     # redis_url: str
     redis_url: str
+<<<<<<< HEAD
     # workflow_cache_key_prefix: str
+=======
+    redis_required: bool
+>>>>>>> 8cef2868d3614e914651eb0379e3ae5755bfab2f
     workflow_cache_key_prefix: str
     # workflow_cache_encrypt: bool
     workflow_cache_encrypt: bool
@@ -97,7 +114,15 @@ class Settings:
     # state_signing_key: str
     state_signing_key: str
 
+<<<<<<< HEAD
     # consent_required: bool
+=======
+    hl7_mllp_enabled: bool
+    hl7_mllp_host: str
+    hl7_mllp_port: int
+    hl7_mllp_source_id: str
+
+>>>>>>> 8cef2868d3614e914651eb0379e3ae5755bfab2f
     consent_required: bool
     # consent_session_ttl_sec: int
     consent_session_ttl_sec: int
@@ -115,6 +140,15 @@ class Settings:
     riva_sample_rate_hz: int
     # riva_asr_http_url: str
     riva_asr_http_url: str
+
+    asr_base_url: str
+    asr_health_path: str
+    asr_transcribe_path: str
+    asr_default_language: str
+    asr_timeout_sec: int
+    asr_auth_header: str
+    asr_auth_token: str
+    asr_verify_tls: bool
 
 
 # def _default_fernet_key() -> str:
@@ -139,6 +173,7 @@ def get_settings() -> Settings:
         env=os.getenv("ENV", "development"),
         # allowed_origins=_parse_origins(os.getenv("ALLOWED_ORIGINS")),
         allowed_origins=_parse_origins(os.getenv("ALLOWED_ORIGINS")),
+<<<<<<< HEAD
         # epic_client_id=os.getenv("EPIC_CLIENT_ID", ""),
         epic_client_id=os.getenv("EPIC_CLIENT_ID", ""),
         # epic_redirect_uri=os.getenv("EPIC_REDIRECT_URI", ""),
@@ -146,39 +181,64 @@ def get_settings() -> Settings:
         # epic_authorize_url=os.getenv(
         epic_authorize_url=os.getenv(
             # "EPIC_AUTHORIZE_URL",
+=======
+        epic_client_id=_clean_string(os.getenv("EPIC_CLIENT_ID", "")),
+        epic_redirect_uri=_clean_string(os.getenv("EPIC_REDIRECT_URI", "")),
+        epic_authorize_url=_clean_string(os.getenv(
+>>>>>>> 8cef2868d3614e914651eb0379e3ae5755bfab2f
             "EPIC_AUTHORIZE_URL",
             # "https://fhir.epic.com/interconnect-fhir-oauth/oauth2/authorize",
             "https://fhir.epic.com/interconnect-fhir-oauth/oauth2/authorize",
+<<<<<<< HEAD
         # ),
         ),
         # epic_token_url=os.getenv(
         epic_token_url=os.getenv(
             # "EPIC_TOKEN_URL",
+=======
+        )),
+        epic_token_url=_clean_string(os.getenv(
+>>>>>>> 8cef2868d3614e914651eb0379e3ae5755bfab2f
             "EPIC_TOKEN_URL",
             # "https://fhir.epic.com/interconnect-fhir-oauth/oauth2/token",
             "https://fhir.epic.com/interconnect-fhir-oauth/oauth2/token",
+<<<<<<< HEAD
         # ),
         ),
         # epic_aud=os.getenv(
         epic_aud=os.getenv(
             # "EPIC_AUD",
+=======
+        )),
+        epic_aud=_clean_string(os.getenv(
+>>>>>>> 8cef2868d3614e914651eb0379e3ae5755bfab2f
             "EPIC_AUD",
             # "https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4",
             "https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4",
+<<<<<<< HEAD
         # ),
         ),
         # epic_scope=os.getenv(
         epic_scope=os.getenv(
             # "EPIC_SCOPE",
+=======
+        )),
+        epic_scope=_clean_string(os.getenv(
+>>>>>>> 8cef2868d3614e914651eb0379e3ae5755bfab2f
             "EPIC_SCOPE",
             # "openid fhirUser launch/patient patient/*.read",
             "openid fhirUser launch/patient patient/*.read",
+<<<<<<< HEAD
         # ),
         ),
         # oauth_state_ttl_sec=_as_int(os.getenv("OAUTH_STATE_TTL_SEC"), 600),
+=======
+        )),
+>>>>>>> 8cef2868d3614e914651eb0379e3ae5755bfab2f
         oauth_state_ttl_sec=_as_int(os.getenv("OAUTH_STATE_TTL_SEC"), 600),
         # workflow_cache_ttl_sec=_as_int(os.getenv("WORKFLOW_CACHE_TTL_SEC"), 300),
         workflow_cache_ttl_sec=_as_int(os.getenv("WORKFLOW_CACHE_TTL_SEC"), 300),
+<<<<<<< HEAD
         # redis_url=os.getenv("REDIS_URL", ""),
         redis_url=os.getenv("REDIS_URL", ""),
         # workflow_cache_key_prefix=os.getenv("WORKFLOW_CACHE_KEY_PREFIX", "ctx"),
@@ -200,11 +260,23 @@ def get_settings() -> Settings:
         # state_signing_key=os.getenv("STATE_SIGNING_KEY", _default_fernet_key()),
         state_signing_key=os.getenv("STATE_SIGNING_KEY", _default_fernet_key()),
         # consent_required=_as_bool(os.getenv("CONSENT_REQUIRED"), True),
+=======
+        redis_url=_clean_string(os.getenv("REDIS_URL", "")),
+        redis_required=_as_bool(os.getenv("REDIS_REQUIRED"), False),
+        workflow_cache_key_prefix=_clean_string(os.getenv("WORKFLOW_CACHE_KEY_PREFIX", "ctx")),
+        workflow_cache_encrypt=_as_bool(os.getenv("WORKFLOW_CACHE_ENCRYPT"), True),
+        context_encryption_key=_clean_string(os.getenv("CONTEXT_ENCRYPTION_KEY", _default_fernet_key())),
+        hl7_mllp_enabled=_as_bool(os.getenv("HL7_MLLP_ENABLED"), False),
+        hl7_mllp_host=_clean_string(os.getenv("HL7_MLLP_HOST", "0.0.0.0")),
+        hl7_mllp_port=_as_int(os.getenv("HL7_MLLP_PORT"), 2575),
+        hl7_mllp_source_id=_clean_string(os.getenv("HL7_MLLP_SOURCE_ID", "hl7-mllp")),
+>>>>>>> 8cef2868d3614e914651eb0379e3ae5755bfab2f
         consent_required=_as_bool(os.getenv("CONSENT_REQUIRED"), True),
         # consent_session_ttl_sec=_as_int(os.getenv("CONSENT_SESSION_TTL_SEC"), 3600),
         consent_session_ttl_sec=_as_int(os.getenv("CONSENT_SESSION_TTL_SEC"), 3600),
         # preflight_pain_threshold=_as_int(os.getenv("PREFLIGHT_PAIN_THRESHOLD"), 7),
         preflight_pain_threshold=_as_int(os.getenv("PREFLIGHT_PAIN_THRESHOLD"), 7),
+<<<<<<< HEAD
         # voice_asr_mode=os.getenv("VOICE_ASR_MODE", "riva_grpc"),
         voice_asr_mode=os.getenv("VOICE_ASR_MODE", "riva_grpc"),
         # riva_grpc_target=os.getenv("RIVA_GRPC_TARGET", "localhost:50051"),
@@ -218,4 +290,14 @@ def get_settings() -> Settings:
         # riva_asr_http_url=os.getenv("RIVA_ASR_HTTP_URL", "http://localhost:8010/v1/asr/transcribe"),
         riva_asr_http_url=os.getenv("RIVA_ASR_HTTP_URL", "http://localhost:8010/v1/asr/transcribe"),
     # )
+=======
+        asr_base_url=_clean_string(os.getenv("ASR_BASE_URL", "")),
+        asr_health_path=_clean_string(os.getenv("ASR_HEALTH_PATH", "/v1/health/ready")),
+        asr_transcribe_path=_clean_string(os.getenv("ASR_TRANSCRIBE_PATH", "/v1/audio/transcriptions")),
+        asr_default_language=_clean_string(os.getenv("ASR_DEFAULT_LANGUAGE", "en-US")),
+        asr_timeout_sec=_as_int(os.getenv("ASR_TIMEOUT_SEC"), 60),
+        asr_auth_header=_clean_string(os.getenv("ASR_AUTH_HEADER", "Authorization")),
+        asr_auth_token=_clean_string(os.getenv("ASR_AUTH_TOKEN", "")),
+        asr_verify_tls=_as_bool(os.getenv("ASR_VERIFY_TLS"), True),
+>>>>>>> 8cef2868d3614e914651eb0379e3ae5755bfab2f
     )

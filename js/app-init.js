@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initLoadingFlow();
   initSessionTimer();
   initChatFlow();
+  initCsvMappingUi();
   initWorkflowUi();
   initEpicUi();
 });

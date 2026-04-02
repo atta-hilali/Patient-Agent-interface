@@ -7,10 +7,12 @@ const EPIC_CONFIG = Object.freeze({
   // hybrid  = try backend first, fallback to browser
   authMode: 'backend',
   // Python backend base URL (FastAPI). Keep same-origin if using reverse proxy.
-  backendBaseUrl: 'https://patient-agent-interface.onrender.com',
+  backendBaseUrl: 'https://signing-well-dts-magnificent.trycloudflare.com',
+  // Preferred ASR language passed to backend /voice/transcribe.
+  asrLanguage: 'en-US',
   // Must exactly match a redirect URI registered in Epic (character-for-character).
   // Use your stable production hostname here (not window.location.origin, which can vary on preview/local URLs).
-  redirectUri: 'https://patientagent.vercel.app/callback.html',
+  redirectUri: 'https://patient-agent-interface.vercel.app/callback.html',
   authorizeUrl: 'https://fhir.epic.com/interconnect-fhir-oauth/oauth2/authorize',
   tokenUrl: 'https://fhir.epic.com/interconnect-fhir-oauth/oauth2/token',
   aud: 'https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4',
@@ -21,3 +23,5 @@ const EPIC_CONFIG = Object.freeze({
     'patient/*.read'
   ].join(' ')
 });
+
+window.EPIC_CONFIG = EPIC_CONFIG;

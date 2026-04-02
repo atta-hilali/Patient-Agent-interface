@@ -46,14 +46,23 @@ class WorkflowCache:
         self.ttl_sec = settings.workflow_cache_ttl_sec
         self.key_prefix = settings.workflow_cache_key_prefix
         self.encrypt_enabled = settings.workflow_cache_encrypt
+        self.redis_required = settings.redis_required
         self._fernet = _build_fernet(settings.context_encryption_key) if self.encrypt_enabled else None
         self._memory: dict[str, InMemoryEntry] = {}
         self._redis: Redis | None = None
+
+        if self.redis_required and Redis is None:
+            raise RuntimeError("REDIS_REQUIRED=true but redis package is unavailable.")
+
+        if self.redis_required and not settings.redis_url:
+            raise RuntimeError("REDIS_REQUIRED=true but REDIS_URL is not configured.")
 
         if settings.redis_url and Redis is not None:
             try:
                 self._redis = Redis.from_url(settings.redis_url, decode_responses=False)
             except Exception:  # noqa: BLE001
+                if self.redis_required:
+                    raise RuntimeError("Failed to initialize Redis client while REDIS_REQUIRED=true.") from None
                 self._redis = None
 
     def cache_key(self, source_id: str, patient_id: str) -> str:
@@ -97,7 +106,12 @@ class WorkflowCache:
                     if decoded:
                         return decoded
             except Exception:  # noqa: BLE001
+                if self.redis_required:
+                    raise RuntimeError("Redis read failed while REDIS_REQUIRED=true.") from None
                 self._redis = None
+
+        if self.redis_required:
+            raise RuntimeError("Redis cache is required but unavailable.")
 
         self._cleanup_memory()
         item = self._memory.get(key)
@@ -114,7 +128,12 @@ class WorkflowCache:
                 await self._redis.set(key, encoded, ex=self.ttl_sec)
                 return
             except Exception:  # noqa: BLE001
+                if self.redis_required:
+                    raise RuntimeError("Redis write failed while REDIS_REQUIRED=true.") from None
                 self._redis = None
+
+        if self.redis_required:
+            raise RuntimeError("Redis cache is required but unavailable.")
 
         self._cleanup_memory()
         self._memory[key] = InMemoryEntry(value=encoded, expires_at=time.time() + self.ttl_sec)
@@ -126,10 +145,16 @@ class WorkflowCache:
             try:
                 return bool(await self._redis.exists(key))
             except Exception:  # noqa: BLE001
+                if self.redis_required:
+                    raise RuntimeError("Redis exists check failed while REDIS_REQUIRED=true.") from None
                 self._redis = None
+
+        if self.redis_required:
+            raise RuntimeError("Redis cache is required but unavailable.")
 
         self._cleanup_memory()
         return key in self._memory
+<<<<<<< HEAD
     
 
     # These bridge the pipeline's expected API to SessionCache
@@ -176,3 +201,18 @@ async def read_context_for_session(session_id: str):
 async def read_patient_id_for_session(session_id: str) -> str | None:
     token = await read_token(session_id)
     return token.patient_id if token else None
+=======
+
+    async def ping(self) -> bool:
+        if self._redis:
+            try:
+                result = await self._redis.ping()
+                return bool(result)
+            except Exception:  # noqa: BLE001
+                if self.redis_required:
+                    raise RuntimeError("Redis ping failed while REDIS_REQUIRED=true.") from None
+                self._redis = None
+        if self.redis_required:
+            raise RuntimeError("Redis cache is required but unavailable.")
+        return False
+>>>>>>> 8cef2868d3614e914651eb0379e3ae5755bfab2f

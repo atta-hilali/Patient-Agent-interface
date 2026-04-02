@@ -107,6 +107,14 @@
         </div>
         <div class="ehr-check" id="check-athena"></div>
       </button>
+      <button class="ehr-option" id="opt-csv" data-ehr-id="csv" type="button">
+        <div class="ehr-logo" style="background:#EFF6FF;border:1px solid #BFDBFE;color:#2563EB">CSV</div>
+        <div class="ehr-info">
+          <div class="ehr-name">CSV / File import</div>
+          <div class="ehr-desc">Upload clinic export and map columns</div>
+        </div>
+        <div class="ehr-check" id="check-csv"></div>
+      </button>
     </div>
 
     <div class="redirect-info" id="redirect-info">
@@ -249,6 +257,38 @@
           <span class="fhir-row-status">fetching</span>
         </div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     SCREEN 4B: CSV MAPPING
+══════════════════════════════════════ -->
+<div class="screen" id="screen-csv-map">
+  <div class="csv-wrap">
+    <div class="csv-card">
+      <button class="ehr-back" id="csv-back-btn" type="button">
+        <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 2L4 7l5 5"/></svg>
+        Back
+      </button>
+      <div class="csv-title">CSV mapping import</div>
+      <div class="csv-sub">Upload CSV, map columns to patient fields, then ingest through the backend CSV adapter.</div>
+
+      <div class="csv-row">
+        <label class="csv-file-label" for="csv-file-input">Choose CSV file</label>
+        <input id="csv-file-input" type="file" accept=".csv,text/csv" hidden/>
+        <button class="csv-btn" id="csv-load-sample-btn" type="button">Load sample</button>
+        <button class="csv-btn primary" id="csv-import-btn" type="button" disabled>Import to workflow</button>
+      </div>
+
+      <div class="csv-file-name" id="csv-file-name">No file selected.</div>
+
+      <div class="csv-preview-wrap" id="csv-preview-wrap" style="display:none">
+        <table class="csv-preview" id="csv-preview-table"></table>
+      </div>
+
+      <div class="csv-map-grid" id="csv-mapping-grid"></div>
+      <div class="csv-status" id="csv-status">Waiting for CSV data.</div>
     </div>
   </div>
 </div>
@@ -407,6 +447,7 @@
 <script src="js/loading-flow.js"></script>
 <script src="js/session-timer.js"></script>
 <script src="js/chat-flow.js"></script>
+<script src="js/csv-mapping-ui.js"></script>
 <script src="js/app-init.js"></script>
 </body>
 </html>
