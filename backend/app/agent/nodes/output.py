@@ -11,8 +11,15 @@ from app.cache import read_context_for_session
 from app.citations.resolver import resolve_citations
 
 
-# ESCALATION_MESSAGES = json.loads(Path("config/escalation_messages.json").read_text(encoding="utf-8"))
-ESCALATION_MESSAGES = json.loads(Path("config/escalation_messages.json").read_text(encoding="utf-8"))
+_BASE_DIR = Path(__file__).resolve().parents[3]
+_ESCALATION_PATH = _BASE_DIR / "config" / "escalation_messages.json"
+if _ESCALATION_PATH.exists():
+    ESCALATION_MESSAGES = json.loads(_ESCALATION_PATH.read_text(encoding="utf-8"))
+else:
+    ESCALATION_MESSAGES = {
+        "general_escalation": {"text": "I am escalating this to your care team now."},
+        "nemoguard_input_blocked": {"text": "I am escalating this to your care team now."},
+    }
 
 
 # async def output_node(state: AgentState) -> dict:

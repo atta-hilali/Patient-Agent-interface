@@ -22,8 +22,10 @@ function initChatFlow() {
   let isRecording = false;
   let recordTimer = null;
   let toastTimer = null;
-  let safetyRequestInFlight = false;
+  let chatRequestInFlight = false;
   let transcribeRequestInFlight = false;
+  let pendingImageBase64 = null;
+  let pendingImageName = '';
   const MAX_VOICE_CAPTURE_MS = 15000;
   const recordingSession = {
     stream: null,
@@ -36,6 +38,35 @@ function initChatFlow() {
 
   function getBackendBaseUrl() {
     return (window.EPIC_CONFIG?.backendBaseUrl || '').replace(/\/+$/, '');
+  }
+
+  function getSessionId() {
+    try {
+      const session = typeof loadEpicSession === 'function' ? loadEpicSession() : null;
+      return (
+        session?.sessionId ||
+        session?.session_id ||
+        ''
+      );
+    } catch {
+      return '';
+    }
+  }
+
+  function getAsrLanguage() {
+    return (window.EPIC_CONFIG?.asrLanguage || 'en-US').trim();
+  }
+
+  function speakText(text) {
+    if (activeMode !== 'voice' || !window.speechSynthesis || !text?.trim()) return;
+    try {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = getAsrLanguage();
+      window.speechSynthesis.speak(utterance);
+    } catch {
+      // Ignore browser TTS issues in static UI mode.
+    }
   }
 
   async function runPreflightSafetyCheck(text) {
@@ -52,10 +83,6 @@ function initChatFlow() {
     } catch {
       return null;
     }
-  }
-
-  function getAsrLanguage() {
-    return (window.EPIC_CONFIG?.asrLanguage || 'en-US').trim();
   }
 
   function writeAsciiString(view, offset, value) {
@@ -127,6 +154,22 @@ function initChatFlow() {
     });
   }
 
+  function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result !== 'string') {
+          reject(new Error('Unable to read image file.'));
+          return;
+        }
+        const parts = reader.result.split(',', 2);
+        resolve(parts.length === 2 ? parts[1] : reader.result);
+      };
+      reader.onerror = () => reject(new Error('Failed to read image file.'));
+      reader.readAsDataURL(file);
+    });
+  }
+
   async function transcribeWithBackend({ audioBase64, mimeType, fileName }) {
     const baseUrl = getBackendBaseUrl();
     if (!baseUrl) {
@@ -183,7 +226,7 @@ function initChatFlow() {
 
   function updateSendState() {
     const hasText = input.value.trim().length > 0;
-    sendBtn.disabled = !hasText;
+    sendBtn.disabled = !hasText || chatRequestInFlight;
   }
 
   function setMode(mode) {
@@ -192,38 +235,6 @@ function initChatFlow() {
       btn.classList.toggle('active', btn.dataset.mode === mode);
     });
     input.placeholder = placeholders[mode] || placeholders.text;
-  }
-
-  function getStaticReply(question) {
-    const q = question.toLowerCase();
-    if (q.includes('metformin') || q.includes('med')) {
-      return {
-        html: 'You currently have 6 active meds. Metformin 1000mg is typically taken with breakfast and dinner to reduce GI side effects.',
-        source: 'MedicationRequest · CarePlan'
-      };
-    }
-    if (q.includes('hba1c') || q.includes('lab')) {
-      return {
-        html: 'Your latest HbA1c is 7.1%. That is slightly above the common target range, so your care team may review diet, activity, and medication timing.',
-        source: 'Observation · CarePlan'
-      };
-    }
-    if (q.includes('appointment') || q.includes('bring')) {
-      return {
-        html: 'Your next appointment is March 22. Bring your medication list, glucose readings, and any symptom notes since your last visit.',
-        source: 'Appointment · CarePlan'
-      };
-    }
-    if (q.includes('allergy') || q.includes('penicillin')) {
-      return {
-        html: 'Your chart lists a penicillin allergy. I can keep warning checks active for medication questions.',
-        source: 'AllergyIntolerance'
-      };
-    }
-    return {
-      html: 'I can help with medications, labs, appointments, allergies, and care plan questions from your connected record.',
-      source: 'FHIR record context'
-    };
   }
 
   function createPatientMessage(text) {
@@ -258,29 +269,174 @@ function initChatFlow() {
     return group;
   }
 
-  function createTypingBubble() {
+  function createStreamingAgentMessage() {
     const group = document.createElement('div');
     group.className = 'msg-group agent';
-    group.dataset.typing = 'true';
-    group.innerHTML = `
-      <div class="msg-sender">Veldooc</div>
-      <div class="typing-bubble">
-        <div class="tdot"></div><div class="tdot"></div><div class="tdot"></div>
-      </div>
-    `;
-    return group;
+
+    const sender = document.createElement('div');
+    sender.className = 'msg-sender';
+    sender.textContent = 'Veldooc';
+
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble agent';
+    bubble.textContent = '';
+
+    const source = document.createElement('div');
+    source.className = 'msg-source';
+    source.innerHTML = '<span class="msg-source-icon">⊙</span>Live response';
+
+    group.appendChild(sender);
+    group.appendChild(bubble);
+    group.appendChild(source);
+    return { group, bubble, source };
+  }
+
+  function getStaticReply(question) {
+    const q = question.toLowerCase();
+    if (q.includes('metformin') || q.includes('med')) {
+      return {
+        html: 'You currently have 6 active meds. Metformin 1000mg is typically taken with breakfast and dinner to reduce GI side effects.',
+        source: 'MedicationRequest · CarePlan'
+      };
+    }
+    if (q.includes('hba1c') || q.includes('lab')) {
+      return {
+        html: 'Your latest HbA1c is 7.1%. That is slightly above the common target range, so your care team may review diet, activity, and medication timing.',
+        source: 'Observation · CarePlan'
+      };
+    }
+    if (q.includes('appointment') || q.includes('bring')) {
+      return {
+        html: 'Your next appointment is March 22. Bring your medication list, glucose readings, and any symptom notes since your last visit.',
+        source: 'Appointment · CarePlan'
+      };
+    }
+    if (q.includes('allergy') || q.includes('penicillin')) {
+      return {
+        html: 'Your chart lists a penicillin allergy. I can keep warning checks active for medication questions.',
+        source: 'AllergyIntolerance'
+      };
+    }
+    return {
+      html: 'I can help with medications, labs, appointments, allergies, and care plan questions from your connected record.',
+      source: 'FHIR record context'
+    };
+  }
+
+  function parseCitations(citations) {
+    if (!Array.isArray(citations) || citations.length === 0) return 'No citations';
+    return citations
+      .map((item) => {
+        const tag = item?.tag || 'CITE';
+        const src = item?.resourceType || item?.sourceType || 'source';
+        return `${tag}:${src}`;
+      })
+      .join(' · ');
+  }
+
+  function parseSseBlocks(buffer) {
+    const blocks = buffer.split('\n\n');
+    const complete = blocks.slice(0, -1);
+    const rest = blocks[blocks.length - 1] || '';
+    return { complete, rest };
+  }
+
+  function parseSseDataLine(block) {
+    const lines = block.split('\n');
+    const dataLines = lines.filter((line) => line.startsWith('data:'));
+    if (!dataLines.length) return null;
+    return dataLines.map((line) => line.slice(5).trim()).join('\n');
+  }
+
+  async function streamAgentReply({ sessionId, message, imageB64, modality }, streamUi) {
+    const baseUrl = getBackendBaseUrl();
+    if (!baseUrl) throw new Error('EPIC_CONFIG.backendBaseUrl is missing.');
+
+    const response = await fetch(`${baseUrl}/agent/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session_id: sessionId,
+        message,
+        image_b64: imageB64 || undefined,
+        modality
+      })
+    });
+
+    if (!response.ok || !response.body) {
+      const text = await response.text();
+      throw new Error(text || `Agent request failed (${response.status}).`);
+    }
+
+    const decoder = new TextDecoder();
+    const reader = response.body.getReader();
+    let buffer = '';
+    let finalText = '';
+    let finalCitations = [];
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const { complete, rest } = parseSseBlocks(buffer);
+      buffer = rest;
+
+      complete.forEach((block) => {
+        const payloadRaw = parseSseDataLine(block);
+        if (!payloadRaw) return;
+        if (payloadRaw === '[DONE]') return;
+
+        let event;
+        try {
+          event = JSON.parse(payloadRaw);
+        } catch {
+          return;
+        }
+
+        if (event.type === 'token' && event.text) {
+          finalText += event.text;
+          streamUi.bubble.textContent = finalText;
+          return;
+        }
+
+        if (event.type === 'sentence' && event.text) {
+          if (!finalText.includes(event.text)) {
+            finalText = `${finalText}${finalText ? ' ' : ''}${event.text}`.trim();
+            streamUi.bubble.textContent = finalText;
+          }
+          return;
+        }
+
+        if (event.type === 'escalation') {
+          finalText = event.text || 'Escalated to clinical team.';
+          streamUi.bubble.textContent = finalText;
+          streamUi.source.innerHTML = '<span class="msg-source-icon">⊙</span>Safety escalation';
+          return;
+        }
+
+        if (event.type === 'done') {
+          finalText = (event.text || finalText || '').trim();
+          finalCitations = Array.isArray(event.citations) ? event.citations : [];
+          streamUi.bubble.textContent = finalText || 'No response text returned.';
+          streamUi.source.innerHTML = `<span class="msg-source-icon">⊙</span>${parseCitations(finalCitations)}`;
+        }
+      });
+    }
+
+    return { text: finalText, citations: finalCitations };
   }
 
   async function sendMessage(text) {
     const message = text.trim();
-    if (!message || safetyRequestInFlight) return;
+    if (!message || chatRequestInFlight) return;
 
-    safetyRequestInFlight = true;
+    chatRequestInFlight = true;
+    updateSendState();
 
     messages.appendChild(createPatientMessage(message));
     input.value = '';
     autoResize();
-    updateSendState();
     scrollToBottom();
 
     const preflight = await runPreflightSafetyCheck(message);
@@ -293,21 +449,52 @@ function initChatFlow() {
       );
       scrollToBottom();
       showToast('Safety escalation triggered.');
-      safetyRequestInFlight = false;
+      chatRequestInFlight = false;
+      updateSendState();
       return;
     }
 
-    const typing = createTypingBubble();
-    messages.appendChild(typing);
+    const sessionId = getSessionId();
+    if (!sessionId) {
+      const fallback = getStaticReply(message);
+      messages.appendChild(createAgentMessage(fallback));
+      scrollToBottom();
+      showToast('No backend session found. Showing static response.');
+      pendingImageBase64 = null;
+      pendingImageName = '';
+      chatRequestInFlight = false;
+      updateSendState();
+      return;
+    }
+
+    const streamUi = createStreamingAgentMessage();
+    messages.appendChild(streamUi.group);
     scrollToBottom();
 
-    const reply = getStaticReply(message);
-    setTimeout(() => {
-      typing.remove();
-      messages.appendChild(createAgentMessage(reply));
+    try {
+      const result = await streamAgentReply(
+        {
+          sessionId,
+          message,
+          imageB64: pendingImageBase64,
+          modality: pendingImageBase64 ? 'image' : (activeMode === 'voice' ? 'voice' : 'text')
+        },
+        streamUi
+      );
+      speakText(result.text);
+      if (pendingImageBase64) showToast(`Image "${pendingImageName || 'upload'}" sent with message.`);
+    } catch (error) {
+      streamUi.group.remove();
+      const fallback = getStaticReply(message);
+      messages.appendChild(createAgentMessage(fallback));
+      showToast(error?.message || 'Agent streaming failed.');
+    } finally {
+      pendingImageBase64 = null;
+      pendingImageName = '';
+      chatRequestInFlight = false;
+      updateSendState();
       scrollToBottom();
-      safetyRequestInFlight = false;
-    }, 900);
+    }
   }
 
   function releaseRecordingResources() {
@@ -473,14 +660,23 @@ function initChatFlow() {
     imageInput.click();
   });
 
-  imageInput.addEventListener('change', () => {
+  imageInput.addEventListener('change', async () => {
     const file = imageInput.files?.[0];
     if (!file) return;
-    input.value = `I uploaded "${file.name}". Please explain what it shows.`;
-    autoResize();
-    updateSendState();
-    showToast(`Attached: ${file.name}`);
-    imageInput.value = '';
+    try {
+      pendingImageBase64 = await fileToBase64(file);
+      pendingImageName = file.name;
+      input.value = `I uploaded "${file.name}". Please explain what it shows.`;
+      autoResize();
+      updateSendState();
+      showToast(`Attached: ${file.name}`);
+    } catch (error) {
+      pendingImageBase64 = null;
+      pendingImageName = '';
+      showToast(error?.message || 'Image attachment failed.');
+    } finally {
+      imageInput.value = '';
+    }
   });
 
   micBtn.addEventListener('click', () => {
@@ -494,7 +690,7 @@ function initChatFlow() {
   });
 
   moreBtn?.addEventListener('click', () => {
-    showToast('Static mode: export/share actions can be connected next.');
+    showToast('Use this menu for export/share in the next iteration.');
   });
 
   privacyLink?.addEventListener('click', (event) => {

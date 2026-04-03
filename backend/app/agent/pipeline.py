@@ -20,7 +20,19 @@ from app.safety.preflight import AllergyIndex, get_preflight_checker
 
 # Fixed escalation copy is loaded once and reused across preflight, input safety,
 # and output safety paths so these responses never depend on an LLM.
-ESCALATION_MSGS = json.loads(Path("config/escalation_messages.json").read_text(encoding="utf-8"))
+_BASE_DIR = Path(__file__).resolve().parents[2]
+_ESCALATION_PATH = _BASE_DIR / "config" / "escalation_messages.json"
+if _ESCALATION_PATH.exists():
+    ESCALATION_MSGS = json.loads(_ESCALATION_PATH.read_text(encoding="utf-8"))
+else:
+    ESCALATION_MSGS = {
+        "general_escalation": {
+            "text": "I am escalating this to your care team now for a safer follow-up.",
+        },
+        "topic_control_general": {
+            "text": "For this question, please contact your clinician directly.",
+        },
+    }
 MAX_TURNS = 10
 _history: dict[str, list] = {}
 _history_summaries: dict[str, str] = {}

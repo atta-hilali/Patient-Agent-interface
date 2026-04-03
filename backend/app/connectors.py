@@ -46,7 +46,7 @@ class ConnectorStore:
         self._load_from_disk()
 
     def _load_from_disk(self) -> None:
-        path = Path(self.settings.connectors_file)
+        path = self._resolve_connectors_path()
         if not path.exists():
             self._cache = {}
             return
@@ -67,13 +67,28 @@ class ConnectorStore:
             self._cache = fresh
 
     def _save_to_disk(self) -> None:
-        path = Path(self.settings.connectors_file)
+        path = self._resolve_connectors_path()
         path.parent.mkdir(parents=True, exist_ok=True)
         data = [
             config.model_dump(mode="json")
             for _, config in sorted(self._cache.items(), key=lambda item: item[0])
         ]
         path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+    def _resolve_connectors_path(self) -> Path:
+        raw = Path(self.settings.connectors_file)
+        if raw.is_absolute():
+            return raw
+
+        candidates = [
+            Path.cwd() / raw,
+            Path(__file__).resolve().parents[2] / raw,  # backend/
+            Path(__file__).resolve().parents[3] / raw,  # repo root
+        ]
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate
+        return candidates[0]
 
     async def refresh_loop(self) -> None:
         while True:

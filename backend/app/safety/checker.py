@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 import httpx
+from app.config import get_settings
 
 try:
     import yaml
@@ -13,8 +14,6 @@ except Exception:  # noqa: BLE001
     yaml = None
 
 
-CS_URL = "http://localhost:8002/v1/guardrail"
-TC_URL = "http://localhost:8003/v1/guardrail"
 DEFAULT_TOPIC_PROFILE = "general_medicine"
 
 DEFAULT_TOPIC_CONFIG = {
@@ -73,13 +72,19 @@ class SafetyChecker:
     def __init__(
         self,
         *,
-        content_safety_url: str = CS_URL,
-        topic_control_url: str = TC_URL,
+        content_safety_url: str | None = None,
+        topic_control_url: str | None = None,
         topic_dir: str = "config/topics",
     ) -> None:
-        self.content_safety_url = content_safety_url
-        self.topic_control_url = topic_control_url
-        self.topic_dir = Path(topic_dir)
+        settings = get_settings()
+        self.content_safety_url = content_safety_url or settings.nemoguard_content_safety_url
+        self.topic_control_url = topic_control_url or settings.nemoguard_topic_control_url
+        requested_topic_dir = Path(topic_dir)
+        if requested_topic_dir.is_absolute():
+            self.topic_dir = requested_topic_dir
+        else:
+            base_dir = Path(__file__).resolve().parents[2]
+            self.topic_dir = base_dir / requested_topic_dir
 
     def available_topic_profiles(self) -> list[str]:
         if not self.topic_dir.exists():
@@ -214,5 +219,10 @@ _checker: SafetyChecker | None = None
 def get_safety_checker() -> SafetyChecker:
     global _checker
     if _checker is None:
-        _checker = SafetyChecker()
+        settings = get_settings()
+        _checker = SafetyChecker(
+            content_safety_url=settings.nemoguard_content_safety_url,
+            topic_control_url=settings.nemoguard_topic_control_url,
+            topic_dir=settings.nemoguard_topic_dir,
+        )
     return _checker

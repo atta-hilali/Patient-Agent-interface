@@ -35,11 +35,13 @@ class PreflightResult:
 class PreflightChecker:
     def __init__(
         self,
-        config_path: str = "config/preflight_rules.yaml",
+        config_path: str | None = None,
         *,
         pain_threshold: int = 7,
     ) -> None:
-        self.config_path = Path(config_path)
+        base_dir = Path(__file__).resolve().parents[2]
+        resolved_path = Path(config_path) if config_path else (base_dir / "config" / "preflight_rules.yaml")
+        self.config_path = resolved_path
         self.pain_threshold = pain_threshold
         self.config = self._load_config()
         self._compiled_profiles: dict[str, dict[str, Any]] = {}

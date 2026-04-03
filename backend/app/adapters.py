@@ -724,16 +724,22 @@ class AdapterResolution:
 class AdapterRegistry:
     def __init__(self, adapters: list[SourceAdapter]) -> None:
         self._adapters = {adapter.source_type: adapter for adapter in adapters}
+        # Backward-compatible aliases so older frontend payloads keep working.
+        self._aliases = {
+            "fhir": "fhir_r4",
+            "hl7": "hl7_v2",
+        }
 
     def resolve(self, source_type: str) -> AdapterResolution:
         normalized = (source_type or "").strip().lower()
-        adapter = self._adapters.get(normalized)
+        canonical = self._aliases.get(normalized, normalized)
+        adapter = self._adapters.get(canonical)
         if not adapter:
             raise ValueError(
                 f"Unsupported sourceType '{source_type}'. Supported: {', '.join(sorted(self._adapters.keys()))}"
             )
         return AdapterResolution(
-            source_type=normalized,
+            source_type=canonical,
             adapter_name=adapter.adapter_name,
             adapter=adapter,
         )

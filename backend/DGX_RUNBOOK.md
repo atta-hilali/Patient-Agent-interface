@@ -1,6 +1,12 @@
-# DGX Backend Runbook (Copy/Paste Ready)
+# DGX Backend Runbook (Phase 2, Copy/Paste Ready)
 
 Use this when you want to start the full backend stack on DGX without searching old chat history.
+
+This runbook covers:
+- Epic SMART on FHIR login via backend callback
+- Phase 2 `/agent/chat` SSE
+- Phase 2 `/ws/audio/{session_id}` WebSocket
+- Voice `/voice/transcribe` (ASR NIM)
 
 ## 1. Expected local structure on DGX
 
@@ -32,8 +38,14 @@ Put real values in `backend/.env` (not `.env.example`), especially:
 - `EPIC_CLIENT_ID`
 - `EPIC_REDIRECT_URI`
 - `ALLOWED_ORIGINS`
-- `ASR_BASE_URL`
+- `STATE_SIGNING_KEY`
 - `REDIS_REQUIRED` and `REDIS_URL`
+- `ASR_BASE_URL`
+- `VOICE_ASR_MODE`, `RIVA_ASR_HTTP_URL` (or gRPC values)
+- `MEDGEMMA_BASE_URL`
+- `NEMOGUARD_CONTENT_SAFETY_URL`
+- `NEMOGUARD_TOPIC_CONTROL_URL`
+- `TTS_NIM_URL` (optional)
 
 ## 3. Start sequence (three terminals)
 
@@ -85,8 +97,37 @@ Expected:
 - `/health` returns `ok: true`
 - `/cache/status` shows expected Redis mode
 - `/voice/asr/probe` shows `tcpReachable: true` and `httpReachable: true`
+- `/workflow/sources` returns source adapter list
+- `/agent/chat` returns `401` without session (this is expected)
 
-## 6. Troubleshooting
+Manual check for SSE after Epic login:
+
+```bash
+curl -N -X POST "http://127.0.0.1:8001/agent/chat" \
+  -H "Content-Type: application/json" \
+  -d '{"session_id":"<SESSION_ID_FROM_CALLBACK>","message":"what are my medications?"}'
+```
+
+Manual check for audio WebSocket route availability:
+
+```bash
+curl -i "http://127.0.0.1:8001/ws/audio/test-session"
+```
+
+Expected: HTTP upgrade required/handshake-related response (route exists).
+
+## 6. Optional model services (Phase 2 full path)
+
+If you are running local model services on DGX, verify these URLs from `.env`:
+
+- `MEDGEMMA_BASE_URL` (vLLM OpenAI-compatible endpoint, e.g. `http://127.0.0.1:8001/v1`)
+- `NEMOGUARD_CONTENT_SAFETY_URL` (e.g. `http://127.0.0.1:8002/v1/guardrail`)
+- `NEMOGUARD_TOPIC_CONTROL_URL` (e.g. `http://127.0.0.1:8003/v1/guardrail`)
+- `TTS_NIM_URL` (optional, e.g. `http://127.0.0.1:8000/v1/tts`)
+
+The backend can start without these, but Phase 2 responses may escalate/fallback if unreachable.
+
+## 7. Troubleshooting
 
 1. `address already in use` on backend:
 ```bash
@@ -104,8 +145,13 @@ BACKEND_PORT=8002 ./scripts/02_start_backend.sh
 3. Epic error `The request is invalid`:
 - In backend `.env`, verify `EPIC_REDIRECT_URI` exactly matches Epic app config.
 - Verify scopes and client id.
+- Verify frontend `EPIC_CONFIG.redirectUri` exactly matches Epic registration.
 
 4. `Failed to fetch` in frontend:
 - Tunnel down or URL changed.
 - CORS mismatch in `ALLOWED_ORIGINS`.
 
+5. `/agent/chat` returns `401 Session expired`:
+- Epic callback did not complete on this backend instance.
+- Run Epic login again and confirm callback returns `session.sessionId`.
+- Confirm Redis is shared/reachable if using multiple instances.

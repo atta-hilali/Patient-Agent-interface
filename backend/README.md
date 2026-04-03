@@ -21,6 +21,10 @@ Copy `.env.example` to `.env` and set:
 - set `CONTEXT_ENCRYPTION_KEY` in production
 - optional HL7 listener vars (`HL7_MLLP_*`)
 - optional ASR vars for NVIDIA NIM (`ASR_*`)
+- Phase 2 session cache TTLs (`CTX_CACHE_TTL_SEC`, `TOKEN_CACHE_TTL_SEC`, `PROMPT_CACHE_TTL_SEC`)
+- signed OAuth state key (`STATE_SIGNING_KEY`)
+- connector config path (`CONNECTORS_FILE`)
+- internal admin key (`INTERNAL_API_KEY`)
 
 ## 2. Run
 
@@ -71,6 +75,9 @@ Optional environment variables:
 - `GET /voice/asr/probe` (Render-side DNS/TCP/HTTP reachability check to ASR)
 - `POST /voice/transcribe` (base64 audio -> ASR NIM transcript)
 - `POST /workflow/unlock-check`
+- `POST /agent/chat` (SSE stream for Phase 2 per-turn loop)
+- `GET /ws/audio/{session_id}` (WebSocket audio stream in, transcript events out)
+- `POST /tts/synthesize` (optional TTS proxy)
 
 ## 4. Workflow architecture
 

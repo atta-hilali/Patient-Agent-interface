@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from .config import Settings
+from .models import AuthToken, PatientContext
+from .session_cache import SessionCache
 
 try:
     from cryptography.fernet import Fernet, InvalidToken
@@ -154,54 +156,6 @@ class WorkflowCache:
 
         self._cleanup_memory()
         return key in self._memory
-<<<<<<< HEAD
-    
-
-    # These bridge the pipeline's expected API to SessionCache
-
-_session_cache_instance = None
-
-def get_session_cache():
-    global _session_cache_instance
-    if _session_cache_instance is None:
-        from app.config import get_settings
-        from app.session_cache import SessionCache
-        _session_cache_instance = SessionCache(get_settings())
-    return _session_cache_instance
-
-async def read_context(session_id: str, patient_id: str):
-    """Read PatientContext from session cache."""
-    raw = await get_session_cache().get_context(session_id, patient_id)
-    if not raw:
-        return None
-    from app.models import PatientContext
-    return PatientContext.model_validate(raw)
-
-async def read_prompt(session_id: str) -> str | None:
-    """Read system prompt from session cache."""
-    return await get_session_cache().get_prompt(session_id)
-
-
-async def read_token(session_id: str):
-    """Read AuthToken from session cache."""
-    raw = await get_session_cache().get_token(session_id)
-    if not raw:
-        return None
-    from app.models import AuthToken
-    return AuthToken.model_validate(raw)
-
-
-async def read_context_for_session(session_id: str):
-    token = await read_token(session_id)
-    if not token:
-        return None
-    return await read_context(session_id, token.patient_id)
-
-
-async def read_patient_id_for_session(session_id: str) -> str | None:
-    token = await read_token(session_id)
-    return token.patient_id if token else None
-=======
 
     async def ping(self) -> bool:
         if self._redis:
@@ -215,4 +169,56 @@ async def read_patient_id_for_session(session_id: str) -> str | None:
         if self.redis_required:
             raise RuntimeError("Redis cache is required but unavailable.")
         return False
->>>>>>> 8cef2868d3614e914651eb0379e3ae5755bfab2f
+
+
+_session_cache_singleton: SessionCache | None = None
+
+
+def _get_session_cache() -> SessionCache:
+    global _session_cache_singleton
+    if _session_cache_singleton is None:
+        from .config import get_settings
+
+        _session_cache_singleton = SessionCache(settings=get_settings())
+    return _session_cache_singleton
+
+
+async def read_prompt(session_id: str) -> str:
+    if not session_id:
+        return ""
+    prompt = await _get_session_cache().get_prompt(session_id)
+    return prompt or ""
+
+
+async def read_context(session_id: str, patient_id: str) -> PatientContext | None:
+    if not session_id or not patient_id:
+        return None
+    raw = await _get_session_cache().get_context(session_id, patient_id)
+    if not raw:
+        return None
+    try:
+        return PatientContext.model_validate(raw)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+async def read_patient_id_for_session(session_id: str) -> str:
+    if not session_id:
+        return ""
+    raw_token = await _get_session_cache().get_token(session_id)
+    if not raw_token:
+        return ""
+    try:
+        token = AuthToken.model_validate(raw_token)
+        return token.patient_id
+    except Exception:  # noqa: BLE001
+        if isinstance(raw_token, dict):
+            return str(raw_token.get("patient_id") or raw_token.get("patient") or "")
+        return ""
+
+
+async def read_context_for_session(session_id: str) -> PatientContext | None:
+    patient_id = await read_patient_id_for_session(session_id)
+    if not patient_id:
+        return None
+    return await read_context(session_id, patient_id)
