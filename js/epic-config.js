@@ -7,7 +7,7 @@ const EPIC_CONFIG = Object.freeze({
   // hybrid  = try backend first, fallback to browser
   authMode: 'backend',
   // Python backend base URL (FastAPI). Keep same-origin if using reverse proxy.
-  backendBaseUrl: 'https://signing-well-dts-magnificent.trycloudflare.com',
+  backendBaseUrl: 'https://sit-earl-transmission-exams.trycloudflare.com',
   // Preferred ASR language passed to backend /voice/transcribe.
   asrLanguage: 'en-US',
   // Must exactly match a redirect URI registered in Epic (character-for-character).
