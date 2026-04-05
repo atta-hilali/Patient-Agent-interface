@@ -14,10 +14,10 @@ from app.agent.pipeline import run_agent_turn
 from app.agent_io import PatientInput
 # from app.config import get_settings
 from app.config import get_settings
+# from app.cache import get_session_cache
+from app.cache import get_session_cache
 # from app.models import AuthToken
 from app.models import AuthToken
-# from app.session_cache import SessionCache
-from app.session_cache import SessionCache
 
 
 # router = APIRouter()
@@ -92,8 +92,8 @@ async def agent_chat(request: Request, session_id: str = Cookie(default=None)):
 
     # settings = get_settings()
     settings = get_settings()
-    # cache = SessionCache(settings=settings)
-    cache = SessionCache(settings=settings)
+    # cache = get_session_cache()
+    cache = get_session_cache()
     # raw_token = await cache.get_token(resolved_session_id)
     raw_token = await cache.get_token(resolved_session_id)
     # if not raw_token:

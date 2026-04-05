@@ -12,7 +12,7 @@ from fastapi.responses import RedirectResponse
 
 from .agent.llm_client import get_llm_health
 from .asr import decode_base64_audio, transcribe_audio
-from .cache import WorkflowCache
+from .cache import WorkflowCache, get_session_cache
 from .config import get_settings
 from .epic import (
     build_authorize_url,
@@ -39,7 +39,6 @@ from .routers.agent import router as agent_router
 from .routers.audio import router as audio_router
 from .routers.tts import router as tts_router
 from .safety import run_preflight_safety_check
-from .session_cache import SessionCache
 from .workflow import WorkflowService, run_workflow_pipeline
 
 
@@ -50,7 +49,7 @@ oauth_state_store = OAuthStateStore(
     signing_key=settings.state_signing_key,
 )
 workflow_cache = WorkflowCache(settings=settings)
-session_cache = SessionCache(settings=settings)
+session_cache = get_session_cache()
 workflow_service = WorkflowService(settings=settings, cache=workflow_cache)
 hl7_listener: Hl7MllpListener | None = None
 hl7_recent_messages: list[dict[str, Any]] = []

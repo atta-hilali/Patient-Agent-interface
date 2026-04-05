@@ -174,7 +174,7 @@ class WorkflowCache:
 _session_cache_singleton: SessionCache | None = None
 
 
-def _get_session_cache() -> SessionCache:
+def get_session_cache() -> SessionCache:
     global _session_cache_singleton
     if _session_cache_singleton is None:
         from .config import get_settings
@@ -186,14 +186,14 @@ def _get_session_cache() -> SessionCache:
 async def read_prompt(session_id: str) -> str:
     if not session_id:
         return ""
-    prompt = await _get_session_cache().get_prompt(session_id)
+    prompt = await get_session_cache().get_prompt(session_id)
     return prompt or ""
 
 
 async def read_context(session_id: str, patient_id: str) -> PatientContext | None:
     if not session_id or not patient_id:
         return None
-    raw = await _get_session_cache().get_context(session_id, patient_id)
+    raw = await get_session_cache().get_context(session_id, patient_id)
     if not raw:
         return None
     try:
@@ -205,7 +205,7 @@ async def read_context(session_id: str, patient_id: str) -> PatientContext | Non
 async def read_patient_id_for_session(session_id: str) -> str:
     if not session_id:
         return ""
-    raw_token = await _get_session_cache().get_token(session_id)
+    raw_token = await get_session_cache().get_token(session_id)
     if not raw_token:
         return ""
     try:
