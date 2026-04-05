@@ -1,6 +1,7 @@
 # DGX Backend Runbook (Phase 2, Copy/Paste Ready)
 
 Use this when you want to start the full backend stack on DGX without searching old chat history.
+For an even shorter daily command flow, also see `backend/PHASE2_START_SHEET.md`.
 
 This runbook covers:
 - Epic SMART on FHIR login via backend callback
