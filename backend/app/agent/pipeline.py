@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from fastapi import HTTPException
 from langchain_core.messages import AIMessage, HumanMessage
 
 from app.agent.graph import agent_graph
@@ -44,6 +45,19 @@ def _get_connector_store() -> ConnectorStore:
     if _connector_store is None:
         _connector_store = ConnectorStore(get_settings())
     return _connector_store
+
+
+async def _resolve_connector_for_session(clinic_id: str | None):
+    store = _get_connector_store()
+    requested_id = (clinic_id or "").strip() or "demo-clinic"
+    try:
+        return await store.get(requested_id)
+    except HTTPException as exc:
+        if exc.status_code != 404:
+            raise
+        if requested_id != "demo-clinic":
+            return await store.get("demo-clinic")
+        raise
 
 
 def _trim_history(session_id: str, messages: list) -> tuple[list, str]:
@@ -108,7 +122,7 @@ async def run_agent_turn(inp: PatientInput, token: AuthToken):
         yield {"type": "error", "text": "Session context expired. Please refresh.", "turn_complete": True}
         return
 
-    connector = await _get_connector_store().get(token.clinic_id or "demo-clinic")
+    connector = await _resolve_connector_for_session(token.clinic_id)
     clinic_yaml = connector.topic_yaml or "general_medicine"
     preflight_profile = connector.specialty or clinic_yaml or "general_medicine"
 

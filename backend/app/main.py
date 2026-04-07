@@ -192,7 +192,7 @@ async def auth_epic_start(format: str = Query(default="redirect")) -> Any:
     signed_state = await oauth_state_store.issue_state(
         state=state_nonce,
         code_verifier=code_verifier,
-        clinic_id="epic-smart",
+        clinic_id="demo-clinic",
     )
     authorize_url = build_authorize_url(settings=settings, state=signed_state, code_challenge=code_challenge)
 

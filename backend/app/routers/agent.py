@@ -112,14 +112,22 @@ async def agent_chat(request: Request, session_id: str = Cookie(default=None)):
 
     # async def sse_stream():
     async def sse_stream():
-        # async for event in run_agent_turn(payload, token):
-        async for event in run_agent_turn(payload, token):
-            # data = event if isinstance(event, dict) else event.model_dump()
-            data = event if isinstance(event, dict) else event.model_dump()
-            # yield f"data: {json.dumps(data)}\n\n"
-            yield f"data: {json.dumps(data)}\n\n"
-        # yield "data: [DONE]\n\n"
-        yield "data: [DONE]\n\n"
+        try:
+            # async for event in run_agent_turn(payload, token):
+            async for event in run_agent_turn(payload, token):
+                # data = event if isinstance(event, dict) else event.model_dump()
+                data = event if isinstance(event, dict) else event.model_dump()
+                # yield f"data: {json.dumps(data)}\n\n"
+                yield f"data: {json.dumps(data)}\n\n"
+        except HTTPException as exc:
+            error_event = {"type": "error", "text": exc.detail or str(exc), "turn_complete": True}
+            yield f"data: {json.dumps(error_event)}\n\n"
+        except Exception as exc:  # noqa: BLE001
+            error_event = {"type": "error", "text": f"Agent failed: {exc}", "turn_complete": True}
+            yield f"data: {json.dumps(error_event)}\n\n"
+        finally:
+            # yield "data: [DONE]\n\n"
+            yield "data: [DONE]\n\n"
 
     # return StreamingResponse(
     return StreamingResponse(
