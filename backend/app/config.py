@@ -93,6 +93,8 @@ class Settings:
     nemoguard_content_safety_url: str
     nemoguard_topic_control_url: str
     nemoguard_topic_dir: str
+    nemoguard_enabled: bool
+    nemoguard_fail_open: bool
 
     medgemma_base_url: str
     medgemma_api_key: str
@@ -180,6 +182,8 @@ def get_settings() -> Settings:
             os.getenv("NEMOGUARD_TOPIC_CONTROL_URL", "http://127.0.0.1:8003/v1/guardrail")
         ),
         nemoguard_topic_dir=_clean_string(os.getenv("NEMOGUARD_TOPIC_DIR", "config/topics")),
+        nemoguard_enabled=_as_bool(os.getenv("NEMOGUARD_ENABLED"), True),
+        nemoguard_fail_open=_as_bool(os.getenv("NEMOGUARD_FAIL_OPEN"), True),
         medgemma_base_url=_clean_string(os.getenv("MEDGEMMA_BASE_URL", "http://127.0.0.1:8001/v1")),
         medgemma_api_key=_clean_string(os.getenv("MEDGEMMA_API_KEY", "not-used")),
         medgemma_mode=_clean_string(os.getenv("MEDGEMMA_MODE", "mvp")),

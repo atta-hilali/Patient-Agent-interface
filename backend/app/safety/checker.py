@@ -79,6 +79,8 @@ class SafetyChecker:
         topic_dir: str = "config/topics",
     ) -> None:
         settings = get_settings()
+        self.enabled = settings.nemoguard_enabled
+        self.fail_open = settings.nemoguard_fail_open
         self.content_safety_url = content_safety_url or settings.nemoguard_content_safety_url
         self.topic_control_url = topic_control_url or settings.nemoguard_topic_control_url
         requested_topic_dir = Path(topic_dir)
@@ -153,6 +155,9 @@ class SafetyChecker:
         return TOPIC_CONTROL_MESSAGE_KEYS.get(normalized, "topic_control_general")
 
     async def _run_parallel_checks(self, *, role: str, text: str, clinic_topic_yaml: str | None) -> SafetyResult:
+        if not self.enabled:
+            return SafetyResult(safe=True, action="allow")
+
         # Both guardrails run concurrently for lower latency. If both block, content
         # safety wins because it represents the stricter safety decision.
         config = self.load_topic_yaml(clinic_topic_yaml)
@@ -166,6 +171,9 @@ class SafetyChecker:
             if isinstance(response, Exception):
                 logger.warning("NemoGuard request failed: %s", repr(response))
                 if isinstance(response, (httpx.ConnectError, httpx.TimeoutException, httpx.HTTPError)):
+                    if self.fail_open:
+                        logger.warning("NemoGuard unavailable but fail-open is enabled; allowing turn.")
+                        return SafetyResult(safe=True, action="allow")
                     return SafetyResult(
                         safe=False,
                         reason="nemoguard_unreachable",
