@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
@@ -15,6 +16,7 @@ except Exception:  # noqa: BLE001
 
 
 DEFAULT_TOPIC_PROFILE = "general_medicine"
+logger = logging.getLogger(__name__)
 
 DEFAULT_TOPIC_CONFIG = {
     "allowed_topics": [
@@ -162,6 +164,7 @@ class SafetyChecker:
 
         for response in (cs_response, tc_response):
             if isinstance(response, Exception):
+                logger.warning("NemoGuard request failed: %s", repr(response))
                 if isinstance(response, (httpx.ConnectError, httpx.TimeoutException, httpx.HTTPError)):
                     return SafetyResult(
                         safe=False,
@@ -177,6 +180,7 @@ class SafetyChecker:
 
         if cs_response.get("blocked"):
             category = self._normalize_category(cs_response.get("category"), "content_safety")
+            logger.info("NemoGuard content safety blocked. category=%s severity=%s", category, cs_response.get("severity"))
             return SafetyResult(
                 safe=False,
                 reason="content_safety",
@@ -190,6 +194,7 @@ class SafetyChecker:
 
         if tc_response.get("blocked"):
             category = self._normalize_category(tc_response.get("category"), "topic_control")
+            logger.info("NemoGuard topic control blocked. category=%s severity=%s", category, tc_response.get("severity"))
             return SafetyResult(
                 safe=False,
                 reason="topic_control",

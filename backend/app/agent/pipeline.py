@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 from fastapi import HTTPException
@@ -38,6 +39,23 @@ MAX_TURNS = 10
 _history: dict[str, list] = {}
 _history_summaries: dict[str, str] = {}
 _connector_store: ConnectorStore | None = None
+logger = logging.getLogger(__name__)
+
+# Input safety should only hard-stop on clearly critical categories.
+# Less-critical moderation categories can continue and will still be checked
+# again on model output by the mandatory output safety node.
+CRITICAL_INPUT_SAFETY_CATEGORIES = {
+    "self_harm",
+    "suicidal",
+    "suicide",
+    "crisis_language",
+    "violence",
+    "overdose",
+}
+
+
+def _normalize_category(value: str | None) -> str:
+    return (value or "").strip().lower().replace(" ", "_")
 
 
 def _get_connector_store() -> ConnectorStore:
@@ -158,23 +176,42 @@ async def run_agent_turn(inp: PatientInput, token: AuthToken):
     # allergy gates have passed.
     input_safety = await check_input_safety(inp.message, clinic_yaml)
     if not input_safety.safe:
-        if input_safety.action == "redirect":
+        category = _normalize_category(input_safety.category)
+
+        # If NemoGuard is temporarily unreachable, keep the turn moving with
+        # deterministic preflight + output safety still active.
+        if input_safety.reason == "nemoguard_unreachable":
+            logger.warning(
+                "Input safety unavailable for session=%s reason=%s category=%s; continuing turn.",
+                session_id,
+                input_safety.reason,
+                input_safety.category,
+            )
+        elif input_safety.blocked_by == "content_safety" and category not in CRITICAL_INPUT_SAFETY_CATEGORIES:
+            # Avoid over-blocking normal patient utterances at input stage.
+            logger.info(
+                "Input content safety non-critical block ignored for session=%s category=%s action=%s.",
+                session_id,
+                input_safety.category,
+                input_safety.action,
+            )
+        elif input_safety.action == "redirect":
             async for event in handle_soft_redirect(
                 input_safety.message_key or "topic_control_input",
                 f"{input_safety.blocked_by}:{input_safety.category}",
             ):
                 yield event
             return
-
-        async for event in handle_hard_stop(
-            session_id,
-            patient_id,
-            f"nemoguard_input:{input_safety.category or input_safety.reason}",
-            input_safety.severity or "HIGH",
-            "topic_control_input" if input_safety.blocked_by == "topic_control" else "nemoguard_input_blocked",
-        ):
-            yield event
-        return
+        else:
+            async for event in handle_hard_stop(
+                session_id,
+                patient_id,
+                f"nemoguard_input:{input_safety.category or input_safety.reason}",
+                input_safety.severity or "HIGH",
+                input_safety.message_key or "nemoguard_input_blocked",
+            ):
+                yield event
+            return
 
     history = _history.get(session_id, [])
     history.append(HumanMessage(content=inp.message))
