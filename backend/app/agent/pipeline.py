@@ -242,6 +242,15 @@ async def run_agent_turn(inp: PatientInput, token: AuthToken):
 
     final_state = await agent_graph.ainvoke(initial_state)
     safety_result = final_state.get("safety_result") or {}
+    logger.info(
+        "Agent turn completed state session=%s intent=%s safety_route=%s blocked_by=%s escalation=%s draft_len=%s",
+        session_id,
+        final_state.get("intent_route"),
+        final_state.get("safety_route"),
+        safety_result.get("blocked_by"),
+        final_state.get("escalation_flag"),
+        len((final_state.get("draft_response") or "").strip()),
+    )
 
     if final_state.get("escalation_flag") and safety_result.get("blocked_by") == "content_safety":
         async for event in handle_hard_stop(

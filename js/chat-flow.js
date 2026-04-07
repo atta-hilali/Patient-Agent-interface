@@ -335,7 +335,8 @@ function initChatFlow() {
   }
 
   function parseSseBlocks(buffer) {
-    const blocks = buffer.split('\n\n');
+    const normalized = buffer.replace(/\r\n/g, '\n');
+    const blocks = normalized.split('\n\n');
     const complete = blocks.slice(0, -1);
     const rest = blocks[blocks.length - 1] || '';
     return { complete, rest };
@@ -373,6 +374,7 @@ function initChatFlow() {
     let buffer = '';
     let finalText = '';
     let finalCitations = [];
+    let sawRenderableEvent = false;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -395,12 +397,14 @@ function initChatFlow() {
         }
 
         if (event.type === 'token' && event.text) {
+          sawRenderableEvent = true;
           finalText += event.text;
           streamUi.bubble.textContent = finalText;
           return;
         }
 
         if (event.type === 'sentence' && event.text) {
+          sawRenderableEvent = true;
           if (!finalText.includes(event.text)) {
             finalText = `${finalText}${finalText ? ' ' : ''}${event.text}`.trim();
             streamUi.bubble.textContent = finalText;
@@ -409,19 +413,50 @@ function initChatFlow() {
         }
 
         if (event.type === 'escalation') {
+          sawRenderableEvent = true;
           finalText = event.text || 'Escalated to clinical team.';
           streamUi.bubble.textContent = finalText;
           streamUi.source.innerHTML = '<span class="msg-source-icon">⊙</span>Safety escalation';
           return;
         }
 
+        if (event.type === 'error') {
+          sawRenderableEvent = true;
+          finalText = event.text || 'Agent failed to generate a response.';
+          streamUi.bubble.textContent = finalText;
+          return;
+        }
+
         if (event.type === 'done') {
+          sawRenderableEvent = true;
           finalText = (event.text || finalText || '').trim();
           finalCitations = Array.isArray(event.citations) ? event.citations : [];
           streamUi.bubble.textContent = finalText || 'No response text returned.';
           streamUi.source.innerHTML = `<span class="msg-source-icon">⊙</span>${parseCitations(finalCitations)}`;
         }
       });
+    }
+
+    if (buffer.trim()) {
+      const { complete } = parseSseBlocks(`${buffer}\n\n`);
+      complete.forEach((block) => {
+        const payloadRaw = parseSseDataLine(block);
+        if (!payloadRaw || payloadRaw === '[DONE]') return;
+        try {
+          const event = JSON.parse(payloadRaw);
+          if (event.type === 'error') {
+            sawRenderableEvent = true;
+            finalText = event.text || 'Agent failed to generate a response.';
+            streamUi.bubble.textContent = finalText;
+          }
+        } catch {
+          // Ignore trailing fragments that are not valid JSON events.
+        }
+      });
+    }
+
+    if (!sawRenderableEvent) {
+      streamUi.bubble.textContent = 'No response text returned.';
     }
 
     return { text: finalText, citations: finalCitations };

@@ -1,5 +1,6 @@
 # import json
 import json
+import logging
 # from base64 import b64encode
 from base64 import b64encode
 
@@ -22,6 +23,7 @@ from app.models import AuthToken
 
 # router = APIRouter()
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 # async def _build_patient_input(request: Request, cookie_session_id: str | None) -> PatientInput:
@@ -120,9 +122,11 @@ async def agent_chat(request: Request, session_id: str = Cookie(default=None)):
                 # yield f"data: {json.dumps(data)}\n\n"
                 yield f"data: {json.dumps(data)}\n\n"
         except HTTPException as exc:
+            logger.warning("Agent stream HTTPException: %s", exc.detail)
             error_event = {"type": "error", "text": exc.detail or str(exc), "turn_complete": True}
             yield f"data: {json.dumps(error_event)}\n\n"
         except Exception as exc:  # noqa: BLE001
+            logger.exception("Agent stream failed unexpectedly.")
             error_event = {"type": "error", "text": f"Agent failed: {exc}", "turn_complete": True}
             yield f"data: {json.dumps(error_event)}\n\n"
         finally:
