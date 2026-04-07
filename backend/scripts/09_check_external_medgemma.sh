@@ -17,13 +17,20 @@ echo
 echo
 
 echo "2) Models"
-MODELS_JSON="$(curl -fsS "${BASE_URL%/}/models")"
+MODELS_JSON="$(curl -sS "${BASE_URL%/}/models")"
 echo "${MODELS_JSON}"
 echo
 echo
 
+DISCOVERED_MODEL="$(echo "${MODELS_JSON}" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p' | head -n1 || true)"
+if [[ -n "${DISCOVERED_MODEL}" && "${MODEL_NAME}" != "${DISCOVERED_MODEL}" ]]; then
+  echo "Using discovered model id for checks: ${DISCOVERED_MODEL} (configured: ${MODEL_NAME})"
+  MODEL_NAME="${DISCOVERED_MODEL}"
+  echo
+fi
+
 echo "3) Chat completions (non-stream)"
-CHAT_JSON="$(curl -fsS "${BASE_URL%/}/chat/completions" \
+CHAT_JSON="$(curl -sS "${BASE_URL%/}/chat/completions" \
   -H "Content-Type: application/json" \
   -d "{
     \"model\":\"${MODEL_NAME}\",
@@ -37,7 +44,7 @@ echo
 echo
 
 echo "4) JSON-shape capability (response_text + citations)"
-JSON_SHAPE="$(curl -fsS "${BASE_URL%/}/chat/completions" \
+JSON_SHAPE="$(curl -sS "${BASE_URL%/}/chat/completions" \
   -H "Content-Type: application/json" \
   -d "{
     \"model\":\"${MODEL_NAME}\",

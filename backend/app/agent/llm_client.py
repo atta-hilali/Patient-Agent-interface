@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import re
 import time
 from collections import deque
 from typing import AsyncIterator, Iterable
 
+import httpx
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from openai import AsyncOpenAI
 
@@ -23,6 +25,8 @@ MAX_TOKENS = int(_settings.medgemma_max_tokens or 1024)
 DEFAULT_MODEL = SPRINT3_MODEL if MEDGEMMA_MODE in {"27b", "sprint3", "production"} else MVP_MODEL
 VLLM = AsyncOpenAI(base_url=MEDGEMMA_BASE_URL, api_key=MEDGEMMA_API_KEY)
 _latencies_ms: deque[float] = deque(maxlen=200)
+_resolved_model_id: str | None = None
+logger = logging.getLogger(__name__)
 
 # LangSmith is intentionally disabled in production because this project handles
 # clinical content and may include PHI. In dev/staging it can be enabled for tracing.
@@ -45,6 +49,7 @@ def get_llm_health() -> dict:
         "alert": p99 > 3000,
         "base_url": MEDGEMMA_BASE_URL,
         "model": DEFAULT_MODEL,
+        "resolved_model": _resolved_model_id or DEFAULT_MODEL,
         "mode": MEDGEMMA_MODE,
     }
 
@@ -99,52 +104,187 @@ async def _with_retry(factory, *, attempts: int = 2):
             await asyncio.sleep(0.2 * (attempt + 1))
 
 
+def _status_code_from_exception(exc: Exception) -> int | None:
+    value = getattr(exc, "status_code", None)
+    if isinstance(value, int):
+        return value
+    text = str(exc)
+    match = re.search(r"\b(4\d\d|5\d\d)\b", text)
+    return int(match.group(1)) if match else None
+
+
+def _extract_text_fragments(payload: object) -> list[str]:
+    fragments: list[str] = []
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            lowered = str(key).strip().lower()
+            if isinstance(value, str) and value.strip() and (
+                lowered in {"text", "answer", "message", "response", "response_text", "output"}
+                or lowered.endswith("text")
+            ):
+                fragments.append(value.strip())
+            elif isinstance(value, (dict, list)):
+                fragments.extend(_extract_text_fragments(value))
+    elif isinstance(payload, list):
+        for item in payload:
+            fragments.extend(_extract_text_fragments(item))
+    return fragments
+
+
+class _LegacyDelta:
+    def __init__(self, content: str) -> None:
+        self.content = content
+
+
+class _LegacyChoice:
+    def __init__(self, content: str) -> None:
+        self.delta = _LegacyDelta(content)
+
+
+class _LegacyChunk:
+    def __init__(self, content: str) -> None:
+        self.choices = [_LegacyChoice(content)]
+
+
+async def _single_chunk_stream(text: str) -> AsyncIterator[_LegacyChunk]:
+    yield _LegacyChunk(text)
+
+
+async def _resolve_model_id() -> str:
+    global _resolved_model_id
+    if _resolved_model_id:
+        return _resolved_model_id
+
+    preferred = DEFAULT_MODEL
+    try:
+        listing = await VLLM.models.list()
+        available = [item.id for item in getattr(listing, "data", []) if getattr(item, "id", None)]
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Could not list MedGemma models at %s: %r", MEDGEMMA_BASE_URL, exc)
+        _resolved_model_id = preferred
+        return _resolved_model_id
+
+    if not available:
+        _resolved_model_id = preferred
+        return _resolved_model_id
+
+    if preferred in available:
+        _resolved_model_id = preferred
+        return _resolved_model_id
+
+    preferred_l = preferred.lower()
+    scale_match = re.search(r"(\d+)\s*b", preferred_l)
+    if scale_match:
+        scale_token = f"{scale_match.group(1)}b"
+        for item in available:
+            if scale_token in item.lower():
+                _resolved_model_id = item
+                logger.warning(
+                    "Configured model '%s' not found. Using discovered model '%s'. Available=%s",
+                    preferred,
+                    item,
+                    ",".join(available),
+                )
+                return _resolved_model_id
+
+    _resolved_model_id = available[0]
+    logger.warning(
+        "Configured model '%s' not found. Using first discovered model '%s'. Available=%s",
+        preferred,
+        _resolved_model_id,
+        ",".join(available),
+    )
+    return _resolved_model_id
+
+
+async def _call_legacy_chat(system_prompt: str, messages: list) -> AsyncIterator[_LegacyChunk]:
+    payload = {
+        "messages": [{"role": "system", "content": system_prompt}, *_serialize_messages(messages)],
+        "max_new_tokens": MAX_TOKENS,
+        "temperature": 0.1,
+        "top_p": 0.9,
+        "top_k": 50,
+        "repetition_penalty": 1.1,
+        "stream": False,
+    }
+    endpoint = f"{MEDGEMMA_BASE_URL.rstrip('/')}/chat"
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        response = await client.post(endpoint, json=payload)
+        response.raise_for_status()
+        data = response.json()
+
+    parts = _extract_text_fragments(data)
+    text = " ".join(dict.fromkeys(parts)).strip()
+    if not text:
+        text = json.dumps(data, ensure_ascii=False)
+    return _single_chunk_stream(text)
+
+
 async def call_medgemma(
     system_prompt: str,
     messages: list,
     tools: list | None = None,
 ) -> AsyncIterator:
-    return await _with_retry(
-        lambda: VLLM.chat.completions.create(
-            model=DEFAULT_MODEL,
-            messages=[{"role": "system", "content": system_prompt}] + _serialize_messages(messages),
-            tools=tools,
-            temperature=0.1,
-            max_tokens=MAX_TOKENS,
-            stream=True,
-            response_format={"type": "json_object"},
-        )
-    )
+    model_id = await _resolve_model_id()
+    payload = {
+        "model": model_id,
+        "messages": [{"role": "system", "content": system_prompt}] + _serialize_messages(messages),
+        "tools": tools,
+        "temperature": 0.1,
+        "max_tokens": MAX_TOKENS,
+        "stream": True,
+        "response_format": {"type": "json_object"},
+    }
+    try:
+        return await _with_retry(lambda: VLLM.chat.completions.create(**payload))
+    except Exception as exc:  # noqa: BLE001
+        status = _status_code_from_exception(exc)
+        if status in {400, 404, 415, 422}:
+            logger.warning(
+                "OpenAI chat/completions incompatible for %s (status=%s). Falling back to legacy /chat.",
+                MEDGEMMA_BASE_URL,
+                status,
+            )
+            return await _call_legacy_chat(system_prompt, messages)
+        raise
 
 
 async def call_medgemma_intent(prompt: str, question: str) -> str:
-    response = await _with_retry(
-        lambda: VLLM.chat.completions.create(
-            model=DEFAULT_MODEL,
-            messages=[{"role": "system", "content": prompt}, {"role": "user", "content": question}],
-            temperature=0.0,
-            max_tokens=3,
+    model_id = await _resolve_model_id()
+    try:
+        response = await _with_retry(
+            lambda: VLLM.chat.completions.create(
+                model=model_id,
+                messages=[{"role": "system", "content": prompt}, {"role": "user", "content": question}],
+                temperature=0.0,
+                max_tokens=3,
+            )
         )
-    )
-    return response.choices[0].message.content or "tools"
+        return response.choices[0].message.content or "tools"
+    except Exception:  # noqa: BLE001
+        return "tools"
 
 
 async def call_medgemma_tool_planner(system_prompt: str, messages: list, tool_catalog: list[dict]) -> list[dict]:
+    model_id = await _resolve_model_id()
     catalog_json = json.dumps(tool_catalog, ensure_ascii=True)
-    response = await _with_retry(
-        lambda: VLLM.chat.completions.create(
-            model=DEFAULT_MODEL,
-            messages=[
-                {"role": "system", "content": TOOL_PLANNER_PROMPT},
-                {"role": "system", "content": f"Clinical context:\n{system_prompt}"},
-                {"role": "system", "content": f"Available tools:\n{catalog_json}"},
-                *_serialize_messages(messages),
-            ],
-            temperature=0.0,
-            max_tokens=512,
-            response_format={"type": "json_object"},
+    try:
+        response = await _with_retry(
+            lambda: VLLM.chat.completions.create(
+                model=model_id,
+                messages=[
+                    {"role": "system", "content": TOOL_PLANNER_PROMPT},
+                    {"role": "system", "content": f"Clinical context:\n{system_prompt}"},
+                    {"role": "system", "content": f"Available tools:\n{catalog_json}"},
+                    *_serialize_messages(messages),
+                ],
+                temperature=0.0,
+                max_tokens=512,
+                response_format={"type": "json_object"},
+            )
         )
-    )
+    except Exception:  # noqa: BLE001
+        return []
     content = response.choices[0].message.content or '{"tool_calls":[]}'
     try:
         parsed = json.loads(content)
@@ -155,23 +295,27 @@ async def call_medgemma_tool_planner(system_prompt: str, messages: list, tool_ca
 
 
 async def call_medgemma_vision(prompt: str, image_b64: str) -> str:
-    response = await _with_retry(
-        lambda: VLLM.chat.completions.create(
-            model=DEFAULT_MODEL,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}},
-                    ],
-                }
-            ],
-            temperature=0.1,
-            max_tokens=512,
+    model_id = await _resolve_model_id()
+    try:
+        response = await _with_retry(
+            lambda: VLLM.chat.completions.create(
+                model=model_id,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}},
+                        ],
+                    }
+                ],
+                temperature=0.1,
+                max_tokens=512,
+            )
         )
-    )
-    return response.choices[0].message.content or ""
+        return response.choices[0].message.content or ""
+    except Exception:  # noqa: BLE001
+        return ""
 
 
 def extract_complete_sentences(text: str) -> tuple[list[str], str]:
