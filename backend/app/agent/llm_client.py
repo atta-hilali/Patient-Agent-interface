@@ -119,7 +119,7 @@ def _extract_text_fragments(payload: object) -> list[str]:
         for key, value in payload.items():
             lowered = str(key).strip().lower()
             if isinstance(value, str) and value.strip() and (
-                lowered in {"text", "answer", "message", "response", "response_text", "output"}
+                lowered in {"text", "answer", "message", "content", "response", "response_text", "output"}
                 or lowered.endswith("text")
             ):
                 fragments.append(value.strip())
@@ -239,13 +239,24 @@ async def call_medgemma(
         return await _with_retry(lambda: VLLM.chat.completions.create(**payload))
     except Exception as exc:  # noqa: BLE001
         status = _status_code_from_exception(exc)
-        if status in {400, 404, 415, 422}:
+        # Some external MedGemma gateways return non-OpenAI payloads even with
+        # HTTP 200, which the OpenAI SDK rejects during parsing. In that case
+        # status may be None, so we still attempt legacy fallback.
+        if status in {400, 404, 415, 422} or status is None:
             logger.warning(
-                "OpenAI chat/completions incompatible for %s (status=%s). Falling back to legacy /chat.",
+                "OpenAI chat/completions incompatible for %s (status=%s, error=%r). Trying legacy /chat fallback.",
                 MEDGEMMA_BASE_URL,
                 status,
+                exc,
             )
-            return await _call_legacy_chat(system_prompt, messages)
+            try:
+                return await _call_legacy_chat(system_prompt, messages)
+            except Exception as fallback_exc:  # noqa: BLE001
+                logger.error(
+                    "Legacy /chat fallback also failed for %s: %r",
+                    MEDGEMMA_BASE_URL,
+                    fallback_exc,
+                )
         raise
 
 

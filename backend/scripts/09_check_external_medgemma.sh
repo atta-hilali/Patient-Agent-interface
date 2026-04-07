@@ -36,7 +36,7 @@ CHAT_JSON="$(curl -sS "${BASE_URL%/}/chat/completions" \
     \"model\":\"${MODEL_NAME}\",
     \"messages\":[{\"role\":\"user\",\"content\":\"Reply with exactly: OK\"}],
     \"max_tokens\":16,
-    \"temperature\":0,
+    \"temperature\":0.1,
     \"stream\":false
   }")"
 echo "${CHAT_JSON}"
