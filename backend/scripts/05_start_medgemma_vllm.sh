@@ -24,7 +24,7 @@ set +a
 : "${MEDGEMMA_MVP_MODEL:=google/medgemma-4b-it}"
 : "${MEDGEMMA_SPRINT3_MODEL:=google/medgemma-27b-it}"
 : "${MEDGEMMA_MAX_TOKENS:=1024}"
-: "${MEDGEMMA_PORT:=8001}"
+: "${MEDGEMMA_PORT:=8080}"
 
 MODEL_NAME="$MEDGEMMA_MVP_MODEL"
 TP_SIZE="${MEDGEMMA_TENSOR_PARALLEL_SIZE:-1}"
@@ -38,6 +38,7 @@ echo "Model: $MODEL_NAME"
 echo "Mode:  $MEDGEMMA_MODE"
 echo "Port:  $MEDGEMMA_PORT"
 echo "TP:    $TP_SIZE"
+echo "OpenAI base URL: http://127.0.0.1:${MEDGEMMA_PORT}/v1"
 
 exec vllm serve "$MODEL_NAME" \
   --tensor-parallel-size "$TP_SIZE" \

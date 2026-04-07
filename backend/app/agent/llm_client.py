@@ -11,13 +11,15 @@ from typing import AsyncIterator, Iterable
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from openai import AsyncOpenAI
 
+from app.config import get_settings
 
-MEDGEMMA_BASE_URL = os.getenv("MEDGEMMA_BASE_URL", "http://localhost:8001/v1")
-MEDGEMMA_API_KEY = os.getenv("MEDGEMMA_API_KEY", "not-used")
-MEDGEMMA_MODE = os.getenv("MEDGEMMA_MODE", "mvp").lower()
-MVP_MODEL = os.getenv("MEDGEMMA_MVP_MODEL", "google/medgemma-4b-it")
-SPRINT3_MODEL = os.getenv("MEDGEMMA_SPRINT3_MODEL", "google/medgemma-27b-it")
-MAX_TOKENS = int(os.getenv("MEDGEMMA_MAX_TOKENS", "1024"))
+_settings = get_settings()
+MEDGEMMA_BASE_URL = _settings.medgemma_base_url or "http://localhost:8001/v1"
+MEDGEMMA_API_KEY = _settings.medgemma_api_key or "not-used"
+MEDGEMMA_MODE = (_settings.medgemma_mode or "mvp").lower()
+MVP_MODEL = _settings.medgemma_mvp_model or "google/medgemma-4b-it"
+SPRINT3_MODEL = _settings.medgemma_sprint3_model or "google/medgemma-27b-it"
+MAX_TOKENS = int(_settings.medgemma_max_tokens or 1024)
 DEFAULT_MODEL = SPRINT3_MODEL if MEDGEMMA_MODE in {"27b", "sprint3", "production"} else MVP_MODEL
 VLLM = AsyncOpenAI(base_url=MEDGEMMA_BASE_URL, api_key=MEDGEMMA_API_KEY)
 _latencies_ms: deque[float] = deque(maxlen=200)
