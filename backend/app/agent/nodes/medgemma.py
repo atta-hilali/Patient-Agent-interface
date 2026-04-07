@@ -1,5 +1,6 @@
 # import json
 import json
+import logging
 
 # from langchain_core.messages import HumanMessage
 from langchain_core.messages import HumanMessage
@@ -8,6 +9,51 @@ from langchain_core.messages import HumanMessage
 from app.agent.llm_client import call_medgemma
 # from app.agent.state import AgentState
 from app.agent.state import AgentState
+
+logger = logging.getLogger(__name__)
+
+
+def _extract_chunk_text(chunk: object) -> str:
+    # OpenAI-compatible chunk shape.
+    choices = getattr(chunk, "choices", None)
+    if isinstance(choices, list) and choices:
+        first = choices[0]
+        delta = getattr(first, "delta", None)
+        delta_text = getattr(delta, "content", None)
+        if isinstance(delta_text, str) and delta_text:
+            return delta_text
+
+        message = getattr(first, "message", None)
+        message_text = getattr(message, "content", None)
+        if isinstance(message_text, str) and message_text:
+            return message_text
+
+    # Legacy/custom stream shape from external gateways.
+    if isinstance(chunk, dict):
+        if chunk.get("type") == "token":
+            token = chunk.get("text", "")
+            return token if isinstance(token, str) else ""
+        for key in ("text", "content", "response_text", "answer", "message"):
+            value = chunk.get(key)
+            if isinstance(value, str) and value.strip():
+                return value
+
+    # Pydantic/dataclass style objects from some SDKs.
+    for attr in ("text", "content", "response_text"):
+        value = getattr(chunk, attr, None)
+        if isinstance(value, str) and value.strip():
+            return value
+
+    model_dump = getattr(chunk, "model_dump", None)
+    if callable(model_dump):
+        try:
+            dumped = model_dump()
+            if isinstance(dumped, dict):
+                return _extract_chunk_text(dumped)
+        except Exception:  # noqa: BLE001
+            return ""
+
+    return ""
 
 
 async def medgemma_node(state: AgentState) -> dict:
@@ -27,10 +73,11 @@ async def medgemma_node(state: AgentState) -> dict:
     full = ""
     stream = await call_medgemma(system_prompt, messages)
     async for chunk in stream:
-        full += chunk.choices[0].delta.content or ""
+        full += _extract_chunk_text(chunk)
 
     raw = (full or "").strip()
     if not raw:
+        logger.warning("MedGemma returned an empty output stream.")
         return {"escalation_flag": True, "escalation_reason": "empty_llm_output"}
 
     try:
