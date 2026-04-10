@@ -7,7 +7,13 @@ const EPIC_CONFIG = Object.freeze({
   // hybrid  = try backend first, fallback to browser
   authMode: 'backend',
   // Python backend base URL (FastAPI). Keep same-origin if using reverse proxy.
-  backendBaseUrl: 'https://posted-clark-sarah-rhythm.trycloudflare.com',
+  backendBaseUrl: 'https://graph-tree-round-shots.trycloudflare.com',
+  // Voice input mode:
+  // websocket = stream PCM to /ws/audio/{session_id} (production-like path)
+  // http      = record chunk then POST /voice/transcribe (fallback)
+  voiceAsrMode: 'websocket',
+  // Optional explicit WS base URL. Leave empty to derive from backendBaseUrl.
+  voiceWsBaseUrl: '',
   // Preferred ASR language passed to backend /voice/transcribe.
   asrLanguage: 'en-US',
   // Must exactly match a redirect URI registered in Epic (character-for-character).

@@ -85,6 +85,7 @@ Then push frontend and redeploy Vercel.
 cd /home/dev1/Desktop/data/features/feature_atta/Patient-Agent-interface/backend
 ./scripts/04_check_stack.sh
 ./scripts/08_check_phase2_models.sh
+./scripts/10_run_tests.sh
 ```
 
 Expected:

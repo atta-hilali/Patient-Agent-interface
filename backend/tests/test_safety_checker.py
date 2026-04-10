@@ -41,7 +41,7 @@ class StubSafetyChecker(SafetyChecker):
 # class SafetyCheckerTests(unittest.IsolatedAsyncioTestCase):
 class SafetyCheckerTests(unittest.IsolatedAsyncioTestCase):
     # async def test_parallel_checks_prefer_content_safety_when_both_return(self):
-    async def test_parallel_checks_prefer_content_safety_when_both_return(self):
+    async def test_strict_checks_stop_after_content_safety_block(self):
         # checker = StubSafetyChecker(
         checker = StubSafetyChecker(
             # [
@@ -65,12 +65,11 @@ class SafetyCheckerTests(unittest.IsolatedAsyncioTestCase):
         # self.assertEqual(result.message_key, "content_safety_self_harm")
         self.assertEqual(result.message_key, "content_safety_self_harm")
         # self.assertEqual(len(checker.calls), 2)
-        self.assertEqual(len(checker.calls), 2)
-        # self.assertEqual({call[0] for call in checker.calls}, {"content_safety", "topic_control"})
-        self.assertEqual({call[0] for call in checker.calls}, {"content_safety", "topic_control"})
+        self.assertEqual(len(checker.calls), 1)
+        self.assertEqual(checker.calls[0][0], "content_safety")
 
-    # async def test_parallel_checks_can_return_topic_control_result(self):
-    async def test_parallel_checks_can_return_topic_control_result(self):
+    # async def test_strict_checks_can_return_topic_control_result(self):
+    async def test_strict_checks_can_return_topic_control_result(self):
         # checker = StubSafetyChecker(
         checker = StubSafetyChecker(
             # [
@@ -93,11 +92,10 @@ class SafetyCheckerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.action, "redirect")
         # self.assertEqual(result.message_key, "topic_control_diagnosis")
         self.assertEqual(result.message_key, "topic_control_diagnosis")
-        # self.assertEqual({call[0] for call in checker.calls}, {"content_safety", "topic_control"})
-        self.assertEqual({call[0] for call in checker.calls}, {"content_safety", "topic_control"})
+        self.assertEqual([call[0] for call in checker.calls], ["content_safety", "topic_control"])
 
-    # async def test_parallel_checks_are_used_for_input_too(self):
-    async def test_parallel_checks_are_used_for_input_too(self):
+    # async def test_strict_checks_are_used_for_input_too(self):
+    async def test_strict_checks_are_used_for_input_too(self):
         # checker = StubSafetyChecker(
         checker = StubSafetyChecker(
             # [
@@ -120,8 +118,7 @@ class SafetyCheckerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.action, "redirect")
         # self.assertEqual(result.message_key, "topic_control_prescribing")
         self.assertEqual(result.message_key, "topic_control_prescribing")
-        # self.assertEqual({call[0] for call in checker.calls}, {"content_safety", "topic_control"})
-        self.assertEqual({call[0] for call in checker.calls}, {"content_safety", "topic_control"})
+        self.assertEqual([call[0] for call in checker.calls], ["content_safety", "topic_control"])
 
     # async def test_load_and_save_custom_topic_yaml(self):
     async def test_load_and_save_custom_topic_yaml(self):
@@ -251,6 +248,7 @@ class SafetyCheckerTests(unittest.IsolatedAsyncioTestCase):
             if isinstance(case["script"], Exception):
                 # checker = FailingSafetyChecker(topic_dir="config/topics")
                 checker = FailingSafetyChecker(topic_dir="config/topics")
+                checker.fail_open = False
             # else:
             else:
                 # checker = StubSafetyChecker(case["script"], topic_dir="config/topics")

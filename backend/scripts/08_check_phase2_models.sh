@@ -24,7 +24,7 @@ curl -fsS "${MEDGEMMA_BASE_URL%/}/chat/completions" \
     \"model\":\"$MEDGEMMA_MODEL\",
     \"messages\":[{\"role\":\"user\",\"content\":\"Reply with exactly: OK\"}],
     \"max_tokens\":8,
-    \"temperature\":0
+    \"temperature\":0.1
   }"
 echo
 echo

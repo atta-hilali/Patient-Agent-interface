@@ -35,6 +35,9 @@ function initChatFlow() {
     chunks: [],
     sampleRate: 44100
   };
+  const wsVoiceSession = {
+    socket: null
+  };
 
   function getBackendBaseUrl() {
     return (window.EPIC_CONFIG?.backendBaseUrl || '').replace(/\/+$/, '');
@@ -55,6 +58,19 @@ function initChatFlow() {
 
   function getAsrLanguage() {
     return (window.EPIC_CONFIG?.asrLanguage || 'en-US').trim();
+  }
+
+  function getVoiceAsrMode() {
+    return (window.EPIC_CONFIG?.voiceAsrMode || 'http').trim().toLowerCase();
+  }
+
+  function getVoiceWsBaseUrl() {
+    const fromConfig = (window.EPIC_CONFIG?.voiceWsBaseUrl || '').trim();
+    if (fromConfig) return fromConfig.replace(/\/+$/, '');
+    const backend = getBackendBaseUrl();
+    if (backend) return backend.replace(/^http/, 'ws').replace(/\/+$/, '');
+    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    return `${protocol}://${window.location.host}`;
   }
 
   function speakText(text) {
@@ -100,6 +116,35 @@ function initChatFlow() {
       offset += chunk.length;
     });
     return merged;
+  }
+
+  function downsampleTo16kHz(input, inputSampleRate) {
+    if (inputSampleRate === 16000) return input;
+    const ratio = inputSampleRate / 16000;
+    const outLength = Math.max(1, Math.round(input.length / ratio));
+    const output = new Float32Array(outLength);
+    let inOffset = 0;
+    for (let i = 0; i < outLength; i += 1) {
+      const nextInOffset = Math.min(input.length, Math.round((i + 1) * ratio));
+      let sum = 0;
+      let count = 0;
+      while (inOffset < nextInOffset) {
+        sum += input[inOffset];
+        inOffset += 1;
+        count += 1;
+      }
+      output[i] = count ? (sum / count) : 0;
+    }
+    return output;
+  }
+
+  function float32ToPcm16Buffer(samples) {
+    const pcm = new Int16Array(samples.length);
+    for (let i = 0; i < samples.length; i += 1) {
+      const clamped = Math.max(-1, Math.min(1, samples[i]));
+      pcm[i] = clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff;
+    }
+    return pcm.buffer;
   }
 
   function encodeMonoWav(samples, sampleRate) {
@@ -261,7 +306,7 @@ function initChatFlow() {
 
     const source = document.createElement('div');
     source.className = 'msg-source';
-    source.innerHTML = `<span class="msg-source-icon">⊙</span>${reply.source}`;
+    source.innerHTML = `<span class="msg-source-icon">*</span>${reply.source}`;
 
     group.appendChild(sender);
     group.appendChild(bubble);
@@ -283,7 +328,7 @@ function initChatFlow() {
 
     const source = document.createElement('div');
     source.className = 'msg-source';
-    source.innerHTML = '<span class="msg-source-icon">⊙</span>Live response';
+    source.innerHTML = '<span class="msg-source-icon">*</span>Live response';
 
     group.appendChild(sender);
     group.appendChild(bubble);
@@ -291,35 +336,10 @@ function initChatFlow() {
     return { group, bubble, source };
   }
 
-  function getStaticReply(question) {
-    const q = question.toLowerCase();
-    if (q.includes('metformin') || q.includes('med')) {
-      return {
-        html: 'You currently have 6 active meds. Metformin 1000mg is typically taken with breakfast and dinner to reduce GI side effects.',
-        source: 'MedicationRequest · CarePlan'
-      };
-    }
-    if (q.includes('hba1c') || q.includes('lab')) {
-      return {
-        html: 'Your latest HbA1c is 7.1%. That is slightly above the common target range, so your care team may review diet, activity, and medication timing.',
-        source: 'Observation · CarePlan'
-      };
-    }
-    if (q.includes('appointment') || q.includes('bring')) {
-      return {
-        html: 'Your next appointment is March 22. Bring your medication list, glucose readings, and any symptom notes since your last visit.',
-        source: 'Appointment · CarePlan'
-      };
-    }
-    if (q.includes('allergy') || q.includes('penicillin')) {
-      return {
-        html: 'Your chart lists a penicillin allergy. I can keep warning checks active for medication questions.',
-        source: 'AllergyIntolerance'
-      };
-    }
+  function createErrorReply(message, source = 'Agent error') {
     return {
-      html: 'I can help with medications, labs, appointments, allergies, and care plan questions from your connected record.',
-      source: 'FHIR record context'
+      html: message || 'Agent response failed.',
+      source
     };
   }
 
@@ -331,7 +351,7 @@ function initChatFlow() {
         const src = item?.resourceType || item?.sourceType || 'source';
         return `${tag}:${src}`;
       })
-      .join(' · ');
+      .join(' | ');
   }
 
   function parseSseBlocks(buffer) {
@@ -416,7 +436,7 @@ function initChatFlow() {
           sawRenderableEvent = true;
           finalText = event.text || 'Escalated to clinical team.';
           streamUi.bubble.textContent = finalText;
-          streamUi.source.innerHTML = '<span class="msg-source-icon">⊙</span>Safety escalation';
+          streamUi.source.innerHTML = '<span class="msg-source-icon">*</span>Safety escalation';
           return;
         }
 
@@ -432,7 +452,7 @@ function initChatFlow() {
           finalText = (event.text || finalText || '').trim();
           finalCitations = Array.isArray(event.citations) ? event.citations : [];
           streamUi.bubble.textContent = finalText || 'No response text returned.';
-          streamUi.source.innerHTML = `<span class="msg-source-icon">⊙</span>${parseCitations(finalCitations)}`;
+          streamUi.source.innerHTML = `<span class="msg-source-icon">*</span>${parseCitations(finalCitations)}`;
         }
       });
     }
@@ -491,10 +511,11 @@ function initChatFlow() {
 
     const sessionId = getSessionId();
     if (!sessionId) {
-      const fallback = getStaticReply(message);
-      messages.appendChild(createAgentMessage(fallback));
+      messages.appendChild(
+        createAgentMessage(createErrorReply('Session expired. Please connect Epic again.', 'Session error'))
+      );
       scrollToBottom();
-      showToast('No backend session found. Showing static response.');
+      showToast('Session expired. Please connect Epic again.');
       pendingImageBase64 = null;
       pendingImageName = '';
       chatRequestInFlight = false;
@@ -519,10 +540,10 @@ function initChatFlow() {
       speakText(result.text);
       if (pendingImageBase64) showToast(`Image "${pendingImageName || 'upload'}" sent with message.`);
     } catch (error) {
-      streamUi.group.remove();
-      const fallback = getStaticReply(message);
-      messages.appendChild(createAgentMessage(fallback));
-      showToast(error?.message || 'Agent streaming failed.');
+      const errorText = error?.message || 'Agent streaming failed.';
+      streamUi.bubble.textContent = errorText;
+      streamUi.source.innerHTML = '<span class="msg-source-icon">*</span>Agent error';
+      showToast(errorText);
     } finally {
       pendingImageBase64 = null;
       pendingImageName = '';
@@ -559,7 +580,91 @@ function initChatFlow() {
     if (recordTimer) clearTimeout(recordTimer);
     recordTimer = null;
     recordingSession.chunks = [];
+    if (wsVoiceSession.socket && wsVoiceSession.socket.readyState <= WebSocket.OPEN) {
+      wsVoiceSession.socket.close();
+    }
+    wsVoiceSession.socket = null;
     releaseRecordingResources();
+  }
+
+  function bindVoiceSocketEvents(socket) {
+    socket.onmessage = (event) => {
+      let payload;
+      try {
+        payload = JSON.parse(event.data);
+      } catch {
+        return;
+      }
+      if (!payload || typeof payload.text !== 'string') return;
+      if (payload.type === 'transcript_partial' || payload.type === 'transcript_final') {
+        input.value = payload.text.trim();
+        autoResize();
+        updateSendState();
+        if (payload.type === 'transcript_final') {
+          showToast('Voice captured. You can edit then send.');
+        }
+      }
+      if (payload.type === 'asr_error') {
+        showToast(payload.text || 'ASR websocket returned an error.');
+      }
+    };
+    socket.onerror = () => {
+      showToast('Voice websocket connection failed.');
+    };
+    socket.onclose = () => {
+      wsVoiceSession.socket = null;
+    };
+  }
+
+  async function startRecordingViaWebsocket() {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error('Browser microphone API is not available.');
+    }
+    const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextCtor) {
+      throw new Error('Web Audio API is not available in this browser.');
+    }
+    const sessionId = getSessionId();
+    if (!sessionId) {
+      throw new Error('Session expired. Please connect Epic again.');
+    }
+
+    const socketUrl = `${getVoiceWsBaseUrl()}/ws/audio/${sessionId}`;
+    const socket = new WebSocket(socketUrl);
+    socket.binaryType = 'arraybuffer';
+    bindVoiceSocketEvents(socket);
+    wsVoiceSession.socket = socket;
+
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const audioContext = new AudioContextCtor();
+    const sourceNode = audioContext.createMediaStreamSource(stream);
+    const processorNode = audioContext.createScriptProcessor(4096, 1, 1);
+
+    recordingSession.stream = stream;
+    recordingSession.audioContext = audioContext;
+    recordingSession.sourceNode = sourceNode;
+    recordingSession.processorNode = processorNode;
+    recordingSession.sampleRate = audioContext.sampleRate || 44100;
+
+    processorNode.onaudioprocess = (event) => {
+      if (!isRecording || !wsVoiceSession.socket || wsVoiceSession.socket.readyState !== WebSocket.OPEN) return;
+      const floatChunk = event.inputBuffer.getChannelData(0);
+      const downsampled = downsampleTo16kHz(floatChunk, recordingSession.sampleRate);
+      wsVoiceSession.socket.send(float32ToPcm16Buffer(downsampled));
+    };
+
+    sourceNode.connect(processorNode);
+    processorNode.connect(audioContext.destination);
+
+    isRecording = true;
+    micBtn.classList.add('recording');
+    showToast('Listening (websocket)... tap mic again to stop.');
+
+    if (recordTimer) clearTimeout(recordTimer);
+    recordTimer = setTimeout(() => {
+      if (!isRecording) return;
+      stopRecording();
+    }, MAX_VOICE_CAPTURE_MS);
   }
 
   async function startRecording() {
@@ -647,13 +752,23 @@ function initChatFlow() {
 
   async function toggleRecording() {
     setMode('voice');
+    const voiceMode = getVoiceAsrMode();
+
     if (isRecording) {
-      await stopRecordingAndTranscribe();
+      if (voiceMode === 'websocket') {
+        stopRecording();
+      } else {
+        await stopRecordingAndTranscribe();
+      }
       return;
     }
 
     try {
-      await startRecording();
+      if (voiceMode === 'websocket') {
+        await startRecordingViaWebsocket();
+      } else {
+        await startRecording();
+      }
     } catch (error) {
       stopRecording();
       showToast(error?.message || 'Unable to access microphone.');
@@ -754,3 +869,4 @@ function initChatFlow() {
   autoResize();
   updateSendState();
 }
+

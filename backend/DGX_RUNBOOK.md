@@ -46,6 +46,8 @@ Put real values in `backend/.env` (not `.env.example`), especially:
 - `MEDGEMMA_BASE_URL`
 - `NEMOGUARD_CONTENT_SAFETY_URL`
 - `NEMOGUARD_TOPIC_CONTROL_URL`
+- `NEMOGUARD_FAIL_OPEN=false`
+- `NEMOGUARD_STRICT_ORDER=true`
 - `TTS_NIM_URL` (optional)
 
 ## 3. Start sequence (three terminals)
@@ -100,6 +102,13 @@ Expected:
 - `/voice/asr/probe` shows `tcpReachable: true` and `httpReachable: true`
 - `/workflow/sources` returns source adapter list
 - `/agent/chat` returns `401` without session (this is expected)
+
+Optional backend tests:
+
+```bash
+chmod +x scripts/10_run_tests.sh
+./scripts/10_run_tests.sh
+```
 
 Manual check for SSE after Epic login:
 

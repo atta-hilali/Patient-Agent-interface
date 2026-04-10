@@ -81,6 +81,7 @@ class SafetyChecker:
         settings = get_settings()
         self.enabled = settings.nemoguard_enabled
         self.fail_open = settings.nemoguard_fail_open
+        self.strict_order = settings.nemoguard_strict_order
         self.content_safety_url = content_safety_url or settings.nemoguard_content_safety_url
         self.topic_control_url = topic_control_url or settings.nemoguard_topic_control_url
         requested_topic_dir = Path(topic_dir)
@@ -154,6 +155,67 @@ class SafetyChecker:
         normalized = self._normalize_category(category, "topic_control")
         return TOPIC_CONTROL_MESSAGE_KEYS.get(normalized, "topic_control_general")
 
+    def _unreachable_result(self, *, role: str, error: Exception) -> SafetyResult:
+        logger.warning("NemoGuard request failed: %s", repr(error))
+        if isinstance(error, (httpx.ConnectError, httpx.TimeoutException, httpx.HTTPError)):
+            if self.fail_open:
+                logger.warning("NemoGuard unavailable but fail-open is enabled; allowing turn.")
+                return SafetyResult(safe=True, action="allow")
+            return SafetyResult(
+                safe=False,
+                reason="nemoguard_unreachable",
+                category="nim_unreachable",
+                blocked_by="nemoguard_unreachable",
+                severity="HIGH",
+                action="escalate",
+                message_key="nemoguard_output_unreachable",
+                discarded_draft=role == "assistant",
+            )
+        raise error
+
+    async def _run_strict_serial_checks(self, *, role: str, text: str, clinic_topic_yaml: str | None) -> SafetyResult:
+        # Strict production mode: content safety first, then topic control only if content passes.
+        config = self.load_topic_yaml(clinic_topic_yaml)
+        try:
+            cs_response = await self._call_content_safety(role, text)
+        except Exception as exc:  # noqa: BLE001
+            return self._unreachable_result(role=role, error=exc)
+
+        if cs_response.get("blocked"):
+            category = self._normalize_category(cs_response.get("category"), "content_safety")
+            logger.info("NemoGuard content safety blocked. category=%s severity=%s", category, cs_response.get("severity"))
+            return SafetyResult(
+                safe=False,
+                reason="content_safety",
+                category=category,
+                blocked_by="content_safety",
+                severity=cs_response.get("severity", "HIGH"),
+                action="escalate",
+                message_key=self._content_safety_message_key(category),
+                discarded_draft=role == "assistant",
+            )
+
+        try:
+            tc_response = await self._call_topic_control(role, text, config)
+        except Exception as exc:  # noqa: BLE001
+            return self._unreachable_result(role=role, error=exc)
+
+        if tc_response.get("blocked"):
+            category = self._normalize_category(tc_response.get("category"), "topic_control")
+            logger.info("NemoGuard topic control blocked. category=%s severity=%s", category, tc_response.get("severity"))
+            return SafetyResult(
+                safe=False,
+                reason="topic_control",
+                category=category,
+                blocked_by="topic_control",
+                severity=tc_response.get("severity", "HIGH"),
+                action="redirect",
+                message_key=self._topic_control_message_key(category),
+                discarded_draft=role == "assistant",
+            )
+
+        return SafetyResult(safe=True, action="allow")
+
     async def _run_parallel_checks(self, *, role: str, text: str, clinic_topic_yaml: str | None) -> SafetyResult:
         if not self.enabled:
             return SafetyResult(safe=True, action="allow")
@@ -217,9 +279,17 @@ class SafetyChecker:
         return SafetyResult(safe=True, action="allow")
 
     async def check_input(self, text: str, clinic_topic_yaml: str | None) -> SafetyResult:
+        if not self.enabled:
+            return SafetyResult(safe=True, action="allow")
+        if self.strict_order:
+            return await self._run_strict_serial_checks(role="user", text=text, clinic_topic_yaml=clinic_topic_yaml)
         return await self._run_parallel_checks(role="user", text=text, clinic_topic_yaml=clinic_topic_yaml)
 
     async def safety_check(self, draft: str, clinic_topic_yaml: str | None) -> SafetyResult:
+        if not self.enabled:
+            return SafetyResult(safe=True, action="allow")
+        if self.strict_order:
+            return await self._run_strict_serial_checks(role="assistant", text=draft, clinic_topic_yaml=clinic_topic_yaml)
         return await self._run_parallel_checks(role="assistant", text=draft, clinic_topic_yaml=clinic_topic_yaml)
 
     async def check_output(self, draft: str, clinic_topic_yaml: str | None) -> SafetyResult:

@@ -2,6 +2,7 @@
 
 This backend moves sensitive Epic OAuth/token/FHIR logic out of the browser.
 For DGX operations, see `backend/DGX_RUNBOOK.md`.
+For strict end-to-end validation, see `backend/STRICT_TEST_CHECKLIST.md`.
 
 ## 1. Setup
 
@@ -25,6 +26,10 @@ Copy `.env.example` to `.env` and set:
 - signed OAuth state key (`STATE_SIGNING_KEY`)
 - connector config path (`CONNECTORS_FILE`)
 - internal admin key (`INTERNAL_API_KEY`)
+- strict safety controls for production:
+  - `NEMOGUARD_ENABLED=true`
+  - `NEMOGUARD_FAIL_OPEN=false`
+  - `NEMOGUARD_STRICT_ORDER=true`
 
 ## 2. Run
 
@@ -99,6 +104,7 @@ In `js/epic-config.js`:
 - `authMode: "backend"` to force backend
 - `authMode: "hybrid"` to try backend then fallback to browser
 - `backendBaseUrl: "http://127.0.0.1:8000"`
+- `voiceAsrMode: "websocket"` for live PCM streaming to `/ws/audio/{session_id}` (`"http"` keeps chunked `/voice/transcribe`)
 - optional `asrLanguage: "en-US"`
 
 ## 6. ASR NIM (voice input)
@@ -124,9 +130,31 @@ Quick ASR check from browser app:
 - Open app chat screen
 - Click microphone
 - Speak
-- Click microphone again to stop and transcribe
+- Click microphone again to stop
+- Confirm transcript appears in input box
 
-## 7. Render deployment (production)
+## 7. Tests
+
+Install and run:
+
+```powershell
+cd backend
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements-dev.txt
+$env:PYTHONPATH="."
+pytest -q
+```
+
+On DGX/Linux:
+
+```bash
+cd backend
+chmod +x scripts/10_run_tests.sh
+./scripts/10_run_tests.sh
+```
+
+## 8. Render deployment (production)
 
 Use these exact settings for a monorepo where backend lives in `backend/`:
 
