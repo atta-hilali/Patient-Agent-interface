@@ -28,8 +28,13 @@ Copy `.env.example` to `.env` and set:
 - internal admin key (`INTERNAL_API_KEY`)
 - strict safety controls for production:
   - `NEMOGUARD_ENABLED=true`
+  - `NEMOGUARD_CONTENT_ENABLED=true`
+  - `NEMOGUARD_TOPIC_ENABLED=true`
   - `NEMOGUARD_FAIL_OPEN=false`
   - `NEMOGUARD_STRICT_ORDER=true`
+  - model ids for OpenAI-compatible fallback mode:
+    - `NEMOGUARD_CONTENT_MODEL=llama-nemotron-safety-guard-v2`
+    - `NEMOGUARD_TOPIC_MODEL=llama-nemotron-topic-control-v2`
 
 ## 2. Run
 

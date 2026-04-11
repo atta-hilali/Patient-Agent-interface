@@ -94,8 +94,12 @@ class Settings:
     nemoguard_topic_control_url: str
     nemoguard_topic_dir: str
     nemoguard_enabled: bool
+    nemoguard_content_enabled: bool
+    nemoguard_topic_enabled: bool
     nemoguard_fail_open: bool
     nemoguard_strict_order: bool
+    nemoguard_content_model: str
+    nemoguard_topic_model: str
 
     medgemma_base_url: str
     medgemma_api_key: str
@@ -184,8 +188,12 @@ def get_settings() -> Settings:
         ),
         nemoguard_topic_dir=_clean_string(os.getenv("NEMOGUARD_TOPIC_DIR", "config/topics")),
         nemoguard_enabled=_as_bool(os.getenv("NEMOGUARD_ENABLED"), True),
+        nemoguard_content_enabled=_as_bool(os.getenv("NEMOGUARD_CONTENT_ENABLED"), True),
+        nemoguard_topic_enabled=_as_bool(os.getenv("NEMOGUARD_TOPIC_ENABLED"), True),
         nemoguard_fail_open=_as_bool(os.getenv("NEMOGUARD_FAIL_OPEN"), True),
         nemoguard_strict_order=_as_bool(os.getenv("NEMOGUARD_STRICT_ORDER"), True),
+        nemoguard_content_model=_clean_string(os.getenv("NEMOGUARD_CONTENT_MODEL", "llama-nemotron-safety-guard-v2")),
+        nemoguard_topic_model=_clean_string(os.getenv("NEMOGUARD_TOPIC_MODEL", "llama-nemotron-topic-control-v2")),
         medgemma_base_url=_clean_string(os.getenv("MEDGEMMA_BASE_URL", "http://127.0.0.1:8001/v1")),
         medgemma_api_key=_clean_string(os.getenv("MEDGEMMA_API_KEY", "not-used")),
         medgemma_mode=_clean_string(os.getenv("MEDGEMMA_MODE", "mvp")),
