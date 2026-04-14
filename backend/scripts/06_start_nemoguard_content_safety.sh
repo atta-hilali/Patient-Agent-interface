@@ -27,28 +27,43 @@ echo "Profile:   $NEMOGUARD_CS_MODEL_PROFILE"
 echo "GPU:       $NEMOGUARD_CS_GPU_DEVICE"
 echo "SHM:       $NEMOGUARD_CS_SHM_SIZE"
 
-RUNTIME_ARG=()
+USE_RUNTIME="false"
 if [[ "$NEMOGUARD_CS_USE_NVIDIA_RUNTIME" == "true" ]]; then
-  RUNTIME_ARG=(--runtime=nvidia)
+  USE_RUNTIME="true"
 elif [[ "$NEMOGUARD_CS_USE_NVIDIA_RUNTIME" == "auto" ]]; then
   if docker info --format '{{json .Runtimes}}' 2>/dev/null | grep -q '"nvidia"'; then
-    RUNTIME_ARG=(--runtime=nvidia)
+    USE_RUNTIME="true"
   fi
 fi
 
-docker run -d \
-  --name "$NEMOGUARD_CS_CONTAINER" \
-  "${RUNTIME_ARG[@]}" \
-  --gpus "device=$NEMOGUARD_CS_GPU_DEVICE" \
-  --shm-size="$NEMOGUARD_CS_SHM_SIZE" \
-  --ulimit nofile=65535:65535 \
-  -u "$(id -u)" \
-  -e NGC_API_KEY="$NGC_API_KEY" \
-  -e NIM_MODEL_PROFILE="$NEMOGUARD_CS_MODEL_PROFILE" \
-  -e NIM_SERVED_MODEL_NAME="$NEMOGUARD_CS_MODEL_NAME" \
-  -v "$LOCAL_NIM_CACHE:/opt/nim/.cache/" \
-  -p "$NEMOGUARD_CS_HOST_PORT:$NEMOGUARD_CS_CONTAINER_PORT" \
-  "$NEMOGUARD_CS_IMAGE"
+if [[ "$USE_RUNTIME" == "true" ]]; then
+  docker run -d \
+    --name "$NEMOGUARD_CS_CONTAINER" \
+    --runtime=nvidia \
+    --gpus "device=$NEMOGUARD_CS_GPU_DEVICE" \
+    --shm-size="$NEMOGUARD_CS_SHM_SIZE" \
+    --ulimit nofile=65535:65535 \
+    -u "$(id -u)" \
+    -e NGC_API_KEY="$NGC_API_KEY" \
+    -e NIM_MODEL_PROFILE="$NEMOGUARD_CS_MODEL_PROFILE" \
+    -e NIM_SERVED_MODEL_NAME="$NEMOGUARD_CS_MODEL_NAME" \
+    -v "$LOCAL_NIM_CACHE:/opt/nim/.cache/" \
+    -p "$NEMOGUARD_CS_HOST_PORT:$NEMOGUARD_CS_CONTAINER_PORT" \
+    "$NEMOGUARD_CS_IMAGE"
+else
+  docker run -d \
+    --name "$NEMOGUARD_CS_CONTAINER" \
+    --gpus "device=$NEMOGUARD_CS_GPU_DEVICE" \
+    --shm-size="$NEMOGUARD_CS_SHM_SIZE" \
+    --ulimit nofile=65535:65535 \
+    -u "$(id -u)" \
+    -e NGC_API_KEY="$NGC_API_KEY" \
+    -e NIM_MODEL_PROFILE="$NEMOGUARD_CS_MODEL_PROFILE" \
+    -e NIM_SERVED_MODEL_NAME="$NEMOGUARD_CS_MODEL_NAME" \
+    -v "$LOCAL_NIM_CACHE:/opt/nim/.cache/" \
+    -p "$NEMOGUARD_CS_HOST_PORT:$NEMOGUARD_CS_CONTAINER_PORT" \
+    "$NEMOGUARD_CS_IMAGE"
+fi
 
 echo
 echo "Tail logs:"

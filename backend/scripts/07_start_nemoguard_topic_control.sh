@@ -36,29 +36,45 @@ if [[ -n "$NEMOGUARD_TC_MODEL_PROFILE" ]]; then
   echo "Profile:   $NEMOGUARD_TC_MODEL_PROFILE"
 fi
 
-RUNTIME_ARG=()
+USE_RUNTIME="false"
 if [[ "$NEMOGUARD_TC_USE_NVIDIA_RUNTIME" == "true" ]]; then
-  RUNTIME_ARG=(--runtime=nvidia)
+  USE_RUNTIME="true"
 elif [[ "$NEMOGUARD_TC_USE_NVIDIA_RUNTIME" == "auto" ]]; then
   if docker info --format '{{json .Runtimes}}' 2>/dev/null | grep -q '"nvidia"'; then
-    RUNTIME_ARG=(--runtime=nvidia)
+    USE_RUNTIME="true"
   fi
 fi
 
-docker run -d \
-  --name "$NEMOGUARD_TC_CONTAINER" \
-  "${RUNTIME_ARG[@]}" \
-  --gpus "device=$NEMOGUARD_TC_GPU_DEVICE" \
-  --shm-size="$NEMOGUARD_TC_SHM_SIZE" \
-  --ulimit nofile=65535:65535 \
-  -u "$(id -u)" \
-  -e NGC_API_KEY="$NGC_API_KEY" \
-  "${MODEL_PROFILE_ARG[@]}" \
-  -e NIM_SERVED_MODEL_NAME="$NEMOGUARD_TC_MODEL_NAME" \
-  -e NIM_CUSTOM_MODEL_NAME="$NEMOGUARD_TC_CUSTOM_MODEL_NAME" \
-  -v "$LOCAL_NIM_CACHE:/opt/nim/.cache/" \
-  -p "$NEMOGUARD_TC_HOST_PORT:$NEMOGUARD_TC_CONTAINER_PORT" \
-  "$NEMOGUARD_TC_IMAGE"
+if [[ "$USE_RUNTIME" == "true" ]]; then
+  docker run -d \
+    --name "$NEMOGUARD_TC_CONTAINER" \
+    --runtime=nvidia \
+    --gpus "device=$NEMOGUARD_TC_GPU_DEVICE" \
+    --shm-size="$NEMOGUARD_TC_SHM_SIZE" \
+    --ulimit nofile=65535:65535 \
+    -u "$(id -u)" \
+    -e NGC_API_KEY="$NGC_API_KEY" \
+    "${MODEL_PROFILE_ARG[@]}" \
+    -e NIM_SERVED_MODEL_NAME="$NEMOGUARD_TC_MODEL_NAME" \
+    -e NIM_CUSTOM_MODEL_NAME="$NEMOGUARD_TC_CUSTOM_MODEL_NAME" \
+    -v "$LOCAL_NIM_CACHE:/opt/nim/.cache/" \
+    -p "$NEMOGUARD_TC_HOST_PORT:$NEMOGUARD_TC_CONTAINER_PORT" \
+    "$NEMOGUARD_TC_IMAGE"
+else
+  docker run -d \
+    --name "$NEMOGUARD_TC_CONTAINER" \
+    --gpus "device=$NEMOGUARD_TC_GPU_DEVICE" \
+    --shm-size="$NEMOGUARD_TC_SHM_SIZE" \
+    --ulimit nofile=65535:65535 \
+    -u "$(id -u)" \
+    -e NGC_API_KEY="$NGC_API_KEY" \
+    "${MODEL_PROFILE_ARG[@]}" \
+    -e NIM_SERVED_MODEL_NAME="$NEMOGUARD_TC_MODEL_NAME" \
+    -e NIM_CUSTOM_MODEL_NAME="$NEMOGUARD_TC_CUSTOM_MODEL_NAME" \
+    -v "$LOCAL_NIM_CACHE:/opt/nim/.cache/" \
+    -p "$NEMOGUARD_TC_HOST_PORT:$NEMOGUARD_TC_CONTAINER_PORT" \
+    "$NEMOGUARD_TC_IMAGE"
+fi
 
 echo
 echo "Tail logs:"
