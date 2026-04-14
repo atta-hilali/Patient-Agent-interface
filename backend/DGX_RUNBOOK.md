@@ -50,6 +50,12 @@ Put real values in `backend/.env` (not `.env.example`), especially:
 - `NEMOGUARD_STRICT_ORDER=true`
 - `TTS_NIM_URL` (optional)
 
+For DGX Spark/single-GPU stability, start with:
+- `MEDGEMMA_MODE=mvp`
+- `MEDGEMMA_MAX_MODEL_LEN=4096`
+- `MEDGEMMA_GPU_MEMORY_UTILIZATION=0.45`
+- `NEMOGUARD_TOPIC_ENABLED=false` (enable later after stack is stable)
+
 ## 3. Start sequence (three terminals)
 
 ### Terminal A: ASR NIM
@@ -165,3 +171,9 @@ BACKEND_PORT=8002 ./scripts/02_start_backend.sh
 - Epic callback did not complete on this backend instance.
 - Run Epic login again and confirm callback returns `session.sessionId`.
 - Confirm Redis is shared/reachable if using multiple instances.
+
+6. DGX hangs when all model services are started:
+- Keep MedGemma in MVP (4B), not 27B.
+- Start ASR -> MedGemma -> Content Safety -> Backend first.
+- Enable Topic Control only after memory/health checks pass.
+- Use lower MedGemma GPU utilization (`MEDGEMMA_GPU_MEMORY_UTILIZATION=0.45`).

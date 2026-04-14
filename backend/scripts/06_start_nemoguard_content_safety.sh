@@ -10,9 +10,11 @@ set -euo pipefail
 : "${NEMOGUARD_CS_MODEL_NAME:=llama-nemotron-safety-guard-v2}"
 # Use this profile on GB10 / ARM systems when TRT profile crashes:
 : "${NEMOGUARD_CS_MODEL_PROFILE:=4f904d571fe60ff24695b5ee2aa42da58cb460787a968f1e8a09f5a7e862728d}"
+: "${NEMOGUARD_CS_GPU_DEVICE:=0}"
+: "${NEMOGUARD_CS_SHM_SIZE:=16GB}"
 
 mkdir -p "$LOCAL_NIM_CACHE"
-chmod -R 777 "$LOCAL_NIM_CACHE" || true
+chmod 700 "$LOCAL_NIM_CACHE" || true
 
 docker rm -f "$NEMOGUARD_CS_CONTAINER" >/dev/null 2>&1 || true
 
@@ -21,12 +23,16 @@ echo "Container: $NEMOGUARD_CS_CONTAINER"
 echo "Image:     $NEMOGUARD_CS_IMAGE"
 echo "Port:      $NEMOGUARD_CS_HOST_PORT -> $NEMOGUARD_CS_CONTAINER_PORT"
 echo "Profile:   $NEMOGUARD_CS_MODEL_PROFILE"
+echo "GPU:       $NEMOGUARD_CS_GPU_DEVICE"
+echo "SHM:       $NEMOGUARD_CS_SHM_SIZE"
 
 docker run -d \
   --name "$NEMOGUARD_CS_CONTAINER" \
-  --gpus '"device=0"' \
-  --shm-size=8GB \
+  --runtime=nvidia \
+  --gpus "device=$NEMOGUARD_CS_GPU_DEVICE" \
+  --shm-size="$NEMOGUARD_CS_SHM_SIZE" \
   --ulimit nofile=65535:65535 \
+  -u "$(id -u)" \
   -e NGC_API_KEY="$NGC_API_KEY" \
   -e NIM_MODEL_PROFILE="$NEMOGUARD_CS_MODEL_PROFILE" \
   -e NIM_SERVED_MODEL_NAME="$NEMOGUARD_CS_MODEL_NAME" \

@@ -7,6 +7,8 @@ set -euo pipefail
 : "${NIM_GRPC_HOST_PORT:=50052}"
 : "${NIM_HTTP_API_PORT:=9000}"
 : "${NIM_GRPC_API_PORT:=50051}"
+: "${ASR_GPU_DEVICE:=0}"
+: "${ASR_SHM_SIZE:=8GB}"
 
 if [[ -z "${NGC_API_KEY:-}" ]]; then
   echo "NGC_API_KEY is missing. Export it first:"
@@ -19,10 +21,12 @@ mkdir -p "$LOCAL_NIM_CACHE"
 echo "Starting ASR NIM container: $CONTAINER_ID"
 echo "HTTP host port: $NIM_HTTP_HOST_PORT -> container $NIM_HTTP_API_PORT"
 echo "gRPC host port: $NIM_GRPC_HOST_PORT -> container $NIM_GRPC_API_PORT"
+echo "GPU: $ASR_GPU_DEVICE"
 
 docker run -it --rm --name="$CONTAINER_ID" \
-  --gpus '"device=0"' \
-  --shm-size=8GB \
+  --runtime=nvidia \
+  --gpus "device=$ASR_GPU_DEVICE" \
+  --shm-size="$ASR_SHM_SIZE" \
   --ulimit nofile=2048:2048 \
   -e NGC_API_KEY \
   -e NIM_TAGS_SELECTOR \
@@ -32,4 +36,3 @@ docker run -it --rm --name="$CONTAINER_ID" \
   -p "$NIM_GRPC_HOST_PORT:$NIM_GRPC_API_PORT" \
   -v "$LOCAL_NIM_CACHE:/opt/nim/.cache" \
   "nvcr.io/nim/nvidia/$CONTAINER_ID:latest"
-

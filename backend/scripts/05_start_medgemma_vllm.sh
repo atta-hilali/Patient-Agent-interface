@@ -25,6 +25,13 @@ set +a
 : "${MEDGEMMA_SPRINT3_MODEL:=google/medgemma-27b-it}"
 : "${MEDGEMMA_MAX_TOKENS:=1024}"
 : "${MEDGEMMA_PORT:=8080}"
+: "${MEDGEMMA_MAX_MODEL_LEN:=4096}"
+: "${MEDGEMMA_GPU_MEMORY_UTILIZATION:=0.45}"
+: "${MEDGEMMA_MAX_NUM_SEQS:=8}"
+: "${MEDGEMMA_MAX_NUM_BATCHED_TOKENS:=2048}"
+: "${MEDGEMMA_DTYPE:=bfloat16}"
+: "${MEDGEMMA_ENABLE_CHUNKED_PREFILL:=true}"
+: "${MEDGEMMA_GPU_DEVICE:=0}"
 
 MODEL_NAME="$MEDGEMMA_MVP_MODEL"
 TP_SIZE="${MEDGEMMA_TENSOR_PARALLEL_SIZE:-1}"
@@ -38,11 +45,28 @@ echo "Model: $MODEL_NAME"
 echo "Mode:  $MEDGEMMA_MODE"
 echo "Port:  $MEDGEMMA_PORT"
 echo "TP:    $TP_SIZE"
+echo "GPU:   $MEDGEMMA_GPU_DEVICE"
+echo "Len:   $MEDGEMMA_MAX_MODEL_LEN"
+echo "VRAM:  $MEDGEMMA_GPU_MEMORY_UTILIZATION"
+echo "Seqs:  $MEDGEMMA_MAX_NUM_SEQS"
 echo "OpenAI base URL: http://127.0.0.1:${MEDGEMMA_PORT}/v1"
 
-exec vllm serve "$MODEL_NAME" \
-  --tensor-parallel-size "$TP_SIZE" \
-  --max-model-len 8192 \
-  --enable-chunked-prefill \
-  --dtype bfloat16 \
+VLLM_ARGS=(
+  "$MODEL_NAME"
+  --tensor-parallel-size "$TP_SIZE"
+  --max-model-len "$MEDGEMMA_MAX_MODEL_LEN"
+  --dtype "$MEDGEMMA_DTYPE"
   --port "$MEDGEMMA_PORT"
+  --gpu-memory-utilization "$MEDGEMMA_GPU_MEMORY_UTILIZATION"
+  --max-num-seqs "$MEDGEMMA_MAX_NUM_SEQS"
+  --max-num-batched-tokens "$MEDGEMMA_MAX_NUM_BATCHED_TOKENS"
+)
+
+if [[ "$MEDGEMMA_ENABLE_CHUNKED_PREFILL" == "true" ]]; then
+  VLLM_ARGS+=(--enable-chunked-prefill)
+fi
+
+export CUDA_VISIBLE_DEVICES="$MEDGEMMA_GPU_DEVICE"
+
+exec vllm serve "${VLLM_ARGS[@]}" \
+  "$@"
