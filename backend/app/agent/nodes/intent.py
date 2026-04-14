@@ -38,6 +38,11 @@ TOOL_KEYWORDS = [
     'this image', 'this photo', 'look at',           # image analysis
     # 'discharge summary', 'after visit', 'document',  # documents
     'discharge summary', 'after visit', 'document',  # documents
+    # medication/timing questions
+    'medication', 'medications', 'medicine', 'meds',
+    'dose', 'dosage', 'pill', 'pills',
+    'when should i take', 'when can i take',
+    'with meals', 'before meal', 'after meal',
 # ]
 ]
 

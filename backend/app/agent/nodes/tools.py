@@ -155,6 +155,32 @@ TOOL_CATALOG = [
 ]
 
 
+def _default_tool_calls_from_question(question: str, session_id: str) -> list[dict]:
+    q = (question or "").lower()
+    medication_hints = (
+        "medication",
+        "medications",
+        "medicine",
+        "meds",
+        "pill",
+        "pills",
+        "dose",
+        "dosage",
+        "when should i take",
+        "when can i take",
+        "with meals",
+        "before meal",
+        "after meal",
+    )
+    if any(hint in q for hint in medication_hints):
+        # Deterministic retrieval for medication timing/usage questions.
+        return [
+            {"name": "get_medications", "args": {"session_id": session_id}},
+            {"name": "get_care_plan", "args": {"session_id": session_id}},
+        ]
+    return []
+
+
 # async def _run_safe(name: str, args: dict) -> tuple[str, str | None]:
 async def _run_safe(name: str, args: dict) -> tuple[str, str | None]:
     # fn = TOOL_MAP.get(name)
@@ -199,6 +225,9 @@ async def tool_executor_node(state: AgentState) -> dict:
     # calls = state.get("tool_calls", [])
     calls = state.get("tool_calls", [])
     # if not calls:
+    if not calls:
+        question = state["messages"][-1].content if state.get("messages") else ""
+        calls = _default_tool_calls_from_question(question, state["session_id"])
     if not calls:
         # planner_messages = list(state.get("messages", []))
         planner_messages = list(state.get("messages", []))

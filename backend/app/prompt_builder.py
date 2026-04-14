@@ -119,6 +119,8 @@ def build_prompt_package(context: PatientContext) -> PromptBuildResult:
     prompt_lines = [
         "You are Veldooc clinical assistant.",
         "Use only the provided PatientContext. If data is missing, explicitly say it is missing.",
+        "Allowed: explain existing medication instructions from the record (timing, with-food notes, route, frequency).",
+        "If exact timing is missing, provide safe general education (follow the prescription label, do not change dose on your own, contact prescriber for personalized schedule).",
         f"Patient: {patient_name} (patient_id={context.patientId})",
         (
             f"Provenance: source_type={context.sourceType}; "
