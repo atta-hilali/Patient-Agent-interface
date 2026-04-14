@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from pathlib import Path
 
 from fastapi import HTTPException
@@ -52,6 +53,34 @@ CRITICAL_INPUT_SAFETY_CATEGORIES = {
     "violence",
     "overdose",
 }
+
+_MED_INFO_TERMS = (
+    "medication",
+    "medications",
+    "medicine",
+    "medicines",
+    "meds",
+    "pill",
+    "pills",
+    "dose",
+    "dosage",
+)
+_MED_CHANGE_PATTERNS = [
+    re.compile(r"\b(stop|start|increase|decrease|double|halve|skip)\b", re.IGNORECASE),
+    re.compile(r"\b(change|adjust)\b.{0,20}\b(dose|dosage|medication|medications|meds)\b", re.IGNORECASE),
+    re.compile(r"\b(can|should)\s+i\s+(stop|change|increase|decrease)\b", re.IGNORECASE),
+]
+
+
+def _is_medication_info_only_query(text: str) -> bool:
+    content = (text or "").strip().lower()
+    if not content:
+        return False
+    if not any(term in content for term in _MED_INFO_TERMS):
+        return False
+    if any(pattern.search(content) for pattern in _MED_CHANGE_PATTERNS):
+        return False
+    return True
 
 
 def _normalize_category(value: str | None) -> str:
@@ -195,6 +224,15 @@ async def run_agent_turn(inp: PatientInput, token: AuthToken):
                 input_safety.category,
                 input_safety.action,
             )
+        elif input_safety.blocked_by == "topic_control" and _is_medication_info_only_query(inp.message):
+            # Topic-control occasionally over-blocks benign medication clarification
+            # requests ("what are my meds", "when do I take them"). Keep these
+            # in-flow; preflight still blocks explicit dose/medication changes.
+            logger.info(
+                "Input topic-control block ignored for medication-info query session=%s category=%s.",
+                session_id,
+                input_safety.category,
+            )
         elif input_safety.action == "redirect":
             async for event in handle_soft_redirect(
                 input_safety.message_key or "topic_control_input",
@@ -265,13 +303,20 @@ async def run_agent_turn(inp: PatientInput, token: AuthToken):
         return
 
     if safety_result.get("blocked_by") == "topic_control":
-        async for event in handle_soft_redirect(
-            final_state.get("safety_message_key") or "topic_control_general",
-            final_state.get("escalation_reason") or "topic_control",
-        ):
-            yield event
-        _history[session_id] = history
-        return
+        if _is_medication_info_only_query(inp.message):
+            logger.info(
+                "Output topic-control block ignored for medication-info query session=%s category=%s.",
+                session_id,
+                safety_result.get("category"),
+            )
+        else:
+            async for event in handle_soft_redirect(
+                final_state.get("safety_message_key") or "topic_control_general",
+                final_state.get("escalation_reason") or "topic_control",
+            ):
+                yield event
+            _history[session_id] = history
+            return
 
     async for event in stream_output(final_state, ctx):
         yield event
