@@ -12,6 +12,7 @@ set -euo pipefail
 : "${NEMOGUARD_CS_MODEL_PROFILE:=4f904d571fe60ff24695b5ee2aa42da58cb460787a968f1e8a09f5a7e862728d}"
 : "${NEMOGUARD_CS_GPU_DEVICE:=0}"
 : "${NEMOGUARD_CS_SHM_SIZE:=16GB}"
+: "${NEMOGUARD_CS_USE_NVIDIA_RUNTIME:=auto}"
 
 mkdir -p "$LOCAL_NIM_CACHE"
 chmod 700 "$LOCAL_NIM_CACHE" || true
@@ -26,9 +27,18 @@ echo "Profile:   $NEMOGUARD_CS_MODEL_PROFILE"
 echo "GPU:       $NEMOGUARD_CS_GPU_DEVICE"
 echo "SHM:       $NEMOGUARD_CS_SHM_SIZE"
 
+RUNTIME_ARG=()
+if [[ "$NEMOGUARD_CS_USE_NVIDIA_RUNTIME" == "true" ]]; then
+  RUNTIME_ARG=(--runtime=nvidia)
+elif [[ "$NEMOGUARD_CS_USE_NVIDIA_RUNTIME" == "auto" ]]; then
+  if docker info --format '{{json .Runtimes}}' 2>/dev/null | grep -q '"nvidia"'; then
+    RUNTIME_ARG=(--runtime=nvidia)
+  fi
+fi
+
 docker run -d \
   --name "$NEMOGUARD_CS_CONTAINER" \
-  --runtime=nvidia \
+  "${RUNTIME_ARG[@]}" \
   --gpus "device=$NEMOGUARD_CS_GPU_DEVICE" \
   --shm-size="$NEMOGUARD_CS_SHM_SIZE" \
   --ulimit nofile=65535:65535 \

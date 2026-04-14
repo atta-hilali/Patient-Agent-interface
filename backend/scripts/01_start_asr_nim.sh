@@ -9,6 +9,7 @@ set -euo pipefail
 : "${NIM_GRPC_API_PORT:=50051}"
 : "${ASR_GPU_DEVICE:=0}"
 : "${ASR_SHM_SIZE:=8GB}"
+: "${ASR_USE_NVIDIA_RUNTIME:=auto}"
 
 if [[ -z "${NGC_API_KEY:-}" ]]; then
   echo "NGC_API_KEY is missing. Export it first:"
@@ -23,8 +24,17 @@ echo "HTTP host port: $NIM_HTTP_HOST_PORT -> container $NIM_HTTP_API_PORT"
 echo "gRPC host port: $NIM_GRPC_HOST_PORT -> container $NIM_GRPC_API_PORT"
 echo "GPU: $ASR_GPU_DEVICE"
 
+RUNTIME_ARG=()
+if [[ "$ASR_USE_NVIDIA_RUNTIME" == "true" ]]; then
+  RUNTIME_ARG=(--runtime=nvidia)
+elif [[ "$ASR_USE_NVIDIA_RUNTIME" == "auto" ]]; then
+  if docker info --format '{{json .Runtimes}}' 2>/dev/null | grep -q '"nvidia"'; then
+    RUNTIME_ARG=(--runtime=nvidia)
+  fi
+fi
+
 docker run -it --rm --name="$CONTAINER_ID" \
-  --runtime=nvidia \
+  "${RUNTIME_ARG[@]}" \
   --gpus "device=$ASR_GPU_DEVICE" \
   --shm-size="$ASR_SHM_SIZE" \
   --ulimit nofile=2048:2048 \

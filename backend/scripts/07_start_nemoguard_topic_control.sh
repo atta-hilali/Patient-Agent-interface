@@ -13,6 +13,7 @@ set -euo pipefail
 # Keep shared memory configurable for different GPU hosts.
 : "${NEMOGUARD_TC_SHM_SIZE:=16GB}"
 : "${NEMOGUARD_TC_GPU_DEVICE:=0}"
+: "${NEMOGUARD_TC_USE_NVIDIA_RUNTIME:=auto}"
 # Set this if auto-profile selection crashes on your platform.
 : "${NEMOGUARD_TC_MODEL_PROFILE:=}"
 
@@ -35,9 +36,18 @@ if [[ -n "$NEMOGUARD_TC_MODEL_PROFILE" ]]; then
   echo "Profile:   $NEMOGUARD_TC_MODEL_PROFILE"
 fi
 
+RUNTIME_ARG=()
+if [[ "$NEMOGUARD_TC_USE_NVIDIA_RUNTIME" == "true" ]]; then
+  RUNTIME_ARG=(--runtime=nvidia)
+elif [[ "$NEMOGUARD_TC_USE_NVIDIA_RUNTIME" == "auto" ]]; then
+  if docker info --format '{{json .Runtimes}}' 2>/dev/null | grep -q '"nvidia"'; then
+    RUNTIME_ARG=(--runtime=nvidia)
+  fi
+fi
+
 docker run -d \
   --name "$NEMOGUARD_TC_CONTAINER" \
-  --runtime=nvidia \
+  "${RUNTIME_ARG[@]}" \
   --gpus "device=$NEMOGUARD_TC_GPU_DEVICE" \
   --shm-size="$NEMOGUARD_TC_SHM_SIZE" \
   --ulimit nofile=65535:65535 \
