@@ -68,6 +68,70 @@ def _first_coding_text(value: Any) -> str:
     return ""
 
 
+def _is_human_friendly_med_name(value: str) -> bool:
+    text = (value or "").strip()
+    if not text:
+        return False
+    # Internal EHR IDs/codes are often long opaque tokens without spaces.
+    if len(text) > 22 and " " not in text and "." in text:
+        return False
+    if len(text) > 28 and " " not in text and "-" in text and text.count("-") >= 3:
+        return False
+    return True
+
+
+def _extract_medication_name(resource: dict[str, Any]) -> str:
+    concept = resource.get("medicationCodeableConcept")
+    if isinstance(concept, dict):
+        text = _as_str(concept.get("text")).strip()
+        if _is_human_friendly_med_name(text):
+            return text
+        coding = concept.get("coding")
+        if isinstance(coding, list):
+            for item in coding:
+                if not isinstance(item, dict):
+                    continue
+                display = _as_str(item.get("display")).strip()
+                if _is_human_friendly_med_name(display):
+                    return display
+
+    med_ref = resource.get("medicationReference")
+    if isinstance(med_ref, dict):
+        display = _as_str(med_ref.get("display")).strip()
+        if _is_human_friendly_med_name(display):
+            return display
+
+    # Use text/code only as a final fallback when it looks human-readable.
+    fallback = _first_coding_text(concept)
+    if _is_human_friendly_med_name(fallback):
+        return fallback
+    return ""
+
+
+def _extract_medication_rxcui(resource: dict[str, Any]) -> str:
+    concept = resource.get("medicationCodeableConcept")
+    if not isinstance(concept, dict):
+        return ""
+    coding = concept.get("coding")
+    if not isinstance(coding, list):
+        return ""
+
+    for item in coding:
+        if not isinstance(item, dict):
+            continue
+        system = _as_str(item.get("system")).lower()
+        code = _as_str(item.get("code")).strip()
+        if not code:
+            continue
+        # RxNorm coding system usually contains "rxnorm".
+        if "rxnorm" in system:
+            return code
+        # Fallback for common OID style representations.
+        if "2.16.840.1.113883.6.88" in system:
+            return code
+    return ""
+
+
 def _build_citation(
     *,
     source_type: str,
@@ -183,9 +247,10 @@ class FhirAdapter(SourceAdapter):
             out.append(
                 MedicationItem(
                     id=resource_id,
-                    name=_first_coding_text(resource.get("medicationCodeableConcept")),
+                    name=_extract_medication_name(resource),
                     status=_as_str(resource.get("status")),
                     dosage=dosage,
+                    rxcui=_extract_medication_rxcui(resource),
                     startDate=_as_str(resource.get("authoredOn")),
                     endDate=_as_str(
                         (
@@ -527,6 +592,7 @@ class GenericStructuredAdapter(SourceAdapter):
                     name=_as_str(item.get("name")) or _as_str(item.get("medication")),
                     status=_as_str(item.get("status")),
                     dosage=_as_str(item.get("dosage")),
+                    rxcui=_as_str(item.get("rxcui")),
                     startDate=_as_str(item.get("startDate")),
                     endDate=_as_str(item.get("endDate")),
                     route=_as_str(item.get("route")),

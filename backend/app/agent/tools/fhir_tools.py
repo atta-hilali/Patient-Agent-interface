@@ -28,6 +28,20 @@ from app.agent.tools.schemas import (
 from app.cache import read_context_for_session
 
 
+def _resolve_medication_display_name(item) -> str:
+    for candidate in (
+        getattr(item, "name", ""),
+        getattr(item, "generic", ""),
+    ):
+        text = (candidate or "").strip()
+        if text:
+            return text
+    rxcui = (getattr(item, "rxcui", "") or "").strip()
+    if rxcui:
+        return f"Unknown medication (RxCUI: {rxcui})"
+    return "Unknown medication"
+
+
 # @tool(args_schema=SessionToolInput)
 @tool(args_schema=SessionToolInput)
 # async def get_medications(session_id: str) -> str:
@@ -46,7 +60,7 @@ async def get_medications(session_id: str) -> str:
         # MedicationRecord(
         MedicationRecord(
             # name=item.name or item.id,
-            name=item.name or item.id,
+            name=_resolve_medication_display_name(item),
             # dose=item.dose or item.dosage or "",
             dose=item.dose or item.dosage or "",
             # frequency=item.frequency or "",
