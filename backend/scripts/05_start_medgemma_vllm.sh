@@ -32,6 +32,8 @@ set +a
 : "${MEDGEMMA_DTYPE:=bfloat16}"
 : "${MEDGEMMA_ENABLE_CHUNKED_PREFILL:=true}"
 : "${MEDGEMMA_GPU_DEVICE:=0}"
+: "${ALLOW_OVERSUBSCRIBE:=false}"
+: "${MEDGEMMA_STARTUP_MEMORY_GUARD_PCT:=85}"
 
 MODEL_NAME="$MEDGEMMA_MVP_MODEL"
 TP_SIZE="${MEDGEMMA_TENSOR_PARALLEL_SIZE:-1}"
@@ -50,6 +52,24 @@ echo "Len:   $MEDGEMMA_MAX_MODEL_LEN"
 echo "VRAM:  $MEDGEMMA_GPU_MEMORY_UTILIZATION"
 echo "Seqs:  $MEDGEMMA_MAX_NUM_SEQS"
 echo "OpenAI base URL: http://127.0.0.1:${MEDGEMMA_PORT}/v1"
+
+if command -v nvidia-smi >/dev/null 2>&1; then
+  mem_line="$(nvidia-smi --query-gpu=memory.used,memory.total --format=csv,noheader,nounits -i "$MEDGEMMA_GPU_DEVICE" 2>/dev/null || true)"
+  if [[ -n "$mem_line" ]]; then
+    used_mem="$(echo "$mem_line" | awk -F',' '{gsub(/ /, "", $1); print $1}')"
+    total_mem="$(echo "$mem_line" | awk -F',' '{gsub(/ /, "", $2); print $2}')"
+    if [[ "$used_mem" =~ ^[0-9]+$ && "$total_mem" =~ ^[0-9]+$ && "$total_mem" -gt 0 ]]; then
+      used_pct=$(( 100 * used_mem / total_mem ))
+      echo "GPU memory before start: ${used_mem}MiB / ${total_mem}MiB (${used_pct}%)"
+      if (( used_pct >= MEDGEMMA_STARTUP_MEMORY_GUARD_PCT )) && [[ "$ALLOW_OVERSUBSCRIBE" != "true" ]]; then
+        echo "GPU is already above ${MEDGEMMA_STARTUP_MEMORY_GUARD_PCT}% memory."
+        echo "Refusing to start MedGemma to avoid DGX instability."
+        echo "Set ALLOW_OVERSUBSCRIBE=true to force start."
+        exit 1
+      fi
+    fi
+  fi
+fi
 
 VLLM_ARGS=(
   "$MODEL_NAME"

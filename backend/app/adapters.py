@@ -44,6 +44,10 @@ def _bundle_entries(bundle: dict[str, Any] | None) -> list[dict[str, Any]]:
     return resources
 
 
+def _resource_type(resource: dict[str, Any]) -> str:
+    return _as_str(resource.get("resourceType")).strip()
+
+
 def _first_coding_text(value: Any) -> str:
     if isinstance(value, dict):
         text = value.get("text")
@@ -77,10 +81,23 @@ def _is_human_friendly_med_name(value: str) -> bool:
         return False
     if len(text) > 28 and " " not in text and "-" in text and text.count("-") >= 3:
         return False
+    if len(text) > 24 and " " not in text and text.count(".") >= 2:
+        return False
+    if text.lower().startswith("medication/"):
+        return False
     return True
 
 
-def _extract_medication_name(resource: dict[str, Any]) -> str:
+def _extract_reference_id(reference: str) -> str:
+    text = (reference or "").strip()
+    if not text:
+        return ""
+    if "/" in text:
+        return text.rsplit("/", 1)[-1]
+    return text
+
+
+def _extract_medication_name(resource: dict[str, Any], medication_lookup: dict[str, dict[str, Any]] | None = None) -> str:
     concept = resource.get("medicationCodeableConcept")
     if isinstance(concept, dict):
         text = _as_str(concept.get("text")).strip()
@@ -100,16 +117,26 @@ def _extract_medication_name(resource: dict[str, Any]) -> str:
         display = _as_str(med_ref.get("display")).strip()
         if _is_human_friendly_med_name(display):
             return display
+        ref_id = _extract_reference_id(_as_str(med_ref.get("reference")))
+        if ref_id and medication_lookup and ref_id in medication_lookup:
+            med_resource = medication_lookup[ref_id]
+            med_name = _first_coding_text(med_resource.get("code")) or _as_str(med_resource.get("name"))
+            if _is_human_friendly_med_name(med_name):
+                return med_name
 
     # Use text/code only as a final fallback when it looks human-readable.
     fallback = _first_coding_text(concept)
     if _is_human_friendly_med_name(fallback):
         return fallback
+    if _resource_type(resource) == "Medication":
+        direct = _first_coding_text(resource.get("code")) or _as_str(resource.get("name"))
+        if _is_human_friendly_med_name(direct):
+            return direct
     return ""
 
 
-def _extract_medication_rxcui(resource: dict[str, Any]) -> str:
-    concept = resource.get("medicationCodeableConcept")
+def _extract_rxnorm_code(value: Any) -> str:
+    concept = value if isinstance(value, dict) else {}
     if not isinstance(concept, dict):
         return ""
     coding = concept.get("coding")
@@ -129,6 +156,25 @@ def _extract_medication_rxcui(resource: dict[str, Any]) -> str:
         # Fallback for common OID style representations.
         if "2.16.840.1.113883.6.88" in system:
             return code
+    return ""
+
+def _extract_medication_rxcui(resource: dict[str, Any], medication_lookup: dict[str, dict[str, Any]] | None = None) -> str:
+    concept = resource.get("medicationCodeableConcept")
+    direct = _extract_rxnorm_code(concept)
+    if direct:
+        return direct
+    if _resource_type(resource) == "Medication":
+        direct_med = _extract_rxnorm_code(resource.get("code"))
+        if direct_med:
+            return direct_med
+    med_ref = resource.get("medicationReference")
+    if isinstance(med_ref, dict):
+        ref_id = _extract_reference_id(_as_str(med_ref.get("reference")))
+        if ref_id and medication_lookup and ref_id in medication_lookup:
+            linked_med = medication_lookup[ref_id]
+            linked_code = _extract_rxnorm_code(linked_med.get("code"))
+            if linked_code:
+                return linked_code
     return ""
 
 
@@ -232,8 +278,25 @@ class FhirAdapter(SourceAdapter):
         *,
         source_id: str,
     ) -> list[MedicationItem]:
+        resources_list = list(resources)
+        medication_lookup: dict[str, dict[str, Any]] = {}
+        for resource in resources_list:
+            if _resource_type(resource) != "Medication":
+                continue
+            resource_id = _as_str(resource.get("id")).strip()
+            if resource_id:
+                medication_lookup[resource_id] = resource
+
+        medication_requests = [
+            resource
+            for resource in resources_list
+            if _resource_type(resource) in {"MedicationRequest", "MedicationStatement", "MedicationDispense"}
+        ]
+        if not medication_requests:
+            medication_requests = [resource for resource in resources_list if _resource_type(resource) == "Medication"]
+
         out: list[MedicationItem] = []
-        for resource in resources:
+        for resource in medication_requests:
             resource_id = _as_str(resource.get("id"))
             dosage = ""
             route = ""
@@ -247,10 +310,10 @@ class FhirAdapter(SourceAdapter):
             out.append(
                 MedicationItem(
                     id=resource_id,
-                    name=_extract_medication_name(resource),
+                    name=_extract_medication_name(resource, medication_lookup),
                     status=_as_str(resource.get("status")),
                     dosage=dosage,
-                    rxcui=_extract_medication_rxcui(resource),
+                    rxcui=_extract_medication_rxcui(resource, medication_lookup),
                     startDate=_as_str(resource.get("authoredOn")),
                     endDate=_as_str(
                         (

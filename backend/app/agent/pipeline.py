@@ -84,7 +84,7 @@ def _is_medication_info_only_query(text: str) -> bool:
 
 
 def _normalize_category(value: str | None) -> str:
-    return (value or "").strip().lower().replace(" ", "_")
+    return (value or "").strip().lower().replace(" ", "_").replace("-", "_")
 
 
 def _get_connector_store() -> ConnectorStore:

@@ -1,6 +1,9 @@
 # from __future__ import annotations
 from __future__ import annotations
 
+import asyncio
+import time
+
 # from langchain_core.tools import tool
 from langchain_core.tools import tool
 
@@ -28,7 +31,37 @@ from app.agent.tools.schemas import (
 from app.cache import read_context_for_session
 
 
-def _resolve_medication_display_name(item) -> str:
+_RXCUI_NAME_TTL_SEC = 60 * 60
+_rxcui_name_cache: dict[str, tuple[float, str]] = {}
+
+
+async def _resolve_rxcui_name(rxcui: str) -> str:
+    code = (rxcui or "").strip()
+    if not code:
+        return ""
+    cached = _rxcui_name_cache.get(code)
+    now = time.time()
+    if cached and cached[0] > now:
+        return cached[1]
+
+    try:
+        import httpx
+
+        url = f"https://rxnav.nlm.nih.gov/REST/rxcui/{code}/properties.json"
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            payload = response.json()
+        name = str(((payload or {}).get("properties") or {}).get("name") or "").strip()
+        if name:
+            _rxcui_name_cache[code] = (now + _RXCUI_NAME_TTL_SEC, name)
+            return name
+    except Exception:  # noqa: BLE001
+        return ""
+    return ""
+
+
+async def _resolve_medication_display_name(item) -> str:
     for candidate in (
         getattr(item, "name", ""),
         getattr(item, "generic", ""),
@@ -38,7 +71,13 @@ def _resolve_medication_display_name(item) -> str:
             return text
     rxcui = (getattr(item, "rxcui", "") or "").strip()
     if rxcui:
+        resolved = await _resolve_rxcui_name(rxcui)
+        if resolved:
+            return resolved
         return f"Unknown medication (RxCUI: {rxcui})"
+    item_id = (getattr(item, "id", "") or "").strip()
+    if item_id:
+        return f"Unknown medication (EHR id: {item_id})"
     return "Unknown medication"
 
 
@@ -56,25 +95,18 @@ async def get_medications(session_id: str) -> str:
         return dump_tool_result(ToolTextResult(tool_name="get_medications", summary="No active medications found."))
 
     # medications = [
-    medications = [
-        # MedicationRecord(
-        MedicationRecord(
-            # name=item.name or item.id,
-            name=_resolve_medication_display_name(item),
-            # dose=item.dose or item.dosage or "",
-            dose=item.dose or item.dosage or "",
-            # frequency=item.frequency or "",
-            frequency=item.frequency or "",
-            # route=item.route or "",
-            route=item.route or "",
-            # indication=item.indication or "",
-            indication=item.indication or "",
-        # )
+    names = await asyncio.gather(*[_resolve_medication_display_name(item) for item in ctx.medications])
+    medications = []
+    for item, name in zip(ctx.medications, names):
+        medications.append(
+            MedicationRecord(
+                name=name,
+                dose=item.dose or item.dosage or "",
+                frequency=item.frequency or "",
+                route=item.route or "",
+                indication=item.indication or "",
+            )
         )
-        # for item in ctx.medications
-        for item in ctx.medications
-    # ]
-    ]
     # summary = "\n".join(
     summary = "\n".join(
         # f"{record.name}: {record.dose or 'dose unavailable'}"

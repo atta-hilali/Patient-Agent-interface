@@ -1,9 +1,11 @@
 import base64
+import asyncio
 import hashlib
 import secrets
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlencode
+from urllib.parse import quote
 
 import httpx
 
@@ -76,11 +78,90 @@ async def fetch_fhir_json(*, settings: Settings, access_token: str, path_with_qu
     return response.json()
 
 
+def _scope_hint(required_scopes: list[str], granted_scope: str) -> str:
+    if not required_scopes:
+        return ""
+    if not granted_scope:
+        return f"Likely missing SMART scopes. Add one of: {', '.join(required_scopes)}."
+    granted = {scope.strip() for scope in granted_scope.split() if scope.strip()}
+    if any(scope in granted or "patient/*.read" in granted for scope in required_scopes):
+        return ""
+    return (
+        "Likely missing SMART scope. "
+        f"Granted: {', '.join(sorted(granted))}. "
+        f"Expected one of: {', '.join(required_scopes)}."
+    )
+
+
+def _operation_outcome_from_exception(
+    *,
+    request_path: str,
+    exc: Exception,
+    required_scopes: list[str],
+    granted_scope: str,
+) -> dict[str, Any]:
+    status_code = 0
+    error_text = str(exc)
+    if isinstance(exc, httpx.HTTPStatusError) and exc.response is not None:
+        status_code = exc.response.status_code
+        response_text = (exc.response.text or "").strip()
+        if response_text:
+            error_text = response_text
+
+    hint = ""
+    if status_code == 403:
+        hint = _scope_hint(required_scopes, granted_scope)
+    elif status_code == 400:
+        hint = "Search parameter mismatch for this tenant; fallback query variants were attempted."
+
+    return {
+        "resourceType": "OperationOutcome",
+        "request": request_path,
+        "statusCode": status_code,
+        "error": error_text,
+        "hint": hint,
+    }
+
+
+async def _fetch_with_fallback_paths(
+    *,
+    settings: Settings,
+    access_token: str,
+    candidate_paths: list[str],
+    required_scopes: list[str],
+    granted_scope: str,
+) -> dict[str, Any]:
+    last_error: Exception | None = None
+    for path_with_query in candidate_paths:
+        try:
+            return await fetch_fhir_json(
+                settings=settings,
+                access_token=access_token,
+                path_with_query=path_with_query,
+            )
+        except Exception as exc:  # noqa: BLE001
+            last_error = exc
+            if isinstance(exc, httpx.HTTPStatusError) and exc.response is not None:
+                # Try fallback query variants for 400/404, otherwise stop.
+                if exc.response.status_code in {400, 404}:
+                    continue
+            break
+
+    return _operation_outcome_from_exception(
+        request_path=candidate_paths[0] if candidate_paths else "",
+        exc=last_error or RuntimeError("Unknown Epic fetch error"),
+        required_scopes=required_scopes,
+        granted_scope=granted_scope,
+    )
+
+
 async def try_fetch_fhir_json(
     *,
     settings: Settings,
     access_token: str,
     path_with_query: str,
+    required_scopes: list[str] | None = None,
+    granted_scope: str = "",
 ) -> dict[str, Any]:
     try:
         return await fetch_fhir_json(
@@ -89,11 +170,12 @@ async def try_fetch_fhir_json(
             path_with_query=path_with_query,
         )
     except Exception as exc:  # noqa: BLE001
-        return {
-            "resourceType": "OperationOutcome",
-            "request": path_with_query,
-            "error": str(exc),
-        }
+        return _operation_outcome_from_exception(
+            request_path=path_with_query,
+            exc=exc,
+            required_scopes=required_scopes or [],
+            granted_scope=granted_scope,
+        )
 
 
 def _patient_name(patient: dict[str, Any]) -> str:
@@ -133,45 +215,107 @@ async def fetch_epic_patient_data(*, settings: Settings, token_response: dict[st
     if not patient_id:
         raise ValueError("No patient ID in token response and no patient found.")
 
+    granted_scope = str(token_response.get("scope") or "")
+    encoded_patient_id = quote(str(patient_id), safe="")
+    patient_reference = quote(f"Patient/{patient_id}", safe="")
+
     patient = await fetch_fhir_json(
         settings=settings,
         access_token=access_token,
         path_with_query=f"Patient/{patient_id}",
     )
-    conditions = await try_fetch_fhir_json(
+
+    conditions_task = _fetch_with_fallback_paths(
         settings=settings,
         access_token=access_token,
-        path_with_query=f"Condition?patient={patient_id}&_count=20",
+        candidate_paths=[
+            f"Condition?patient={encoded_patient_id}&_count=20",
+            f"Condition?subject={patient_reference}&_count=20",
+            f"Condition?subject={encoded_patient_id}&_count=20",
+        ],
+        required_scopes=["patient/Condition.read"],
+        granted_scope=granted_scope,
     )
-    observations = await try_fetch_fhir_json(
+    observations_task = _fetch_with_fallback_paths(
         settings=settings,
         access_token=access_token,
-        path_with_query=f"Observation?patient={patient_id}&_count=20",
+        candidate_paths=[
+            f"Observation?patient={encoded_patient_id}&_count=20",
+            f"Observation?subject={patient_reference}&_count=20",
+            f"Observation?subject={encoded_patient_id}&_count=20",
+        ],
+        required_scopes=["patient/Observation.read"],
+        granted_scope=granted_scope,
     )
-    medications = await try_fetch_fhir_json(
+    medications_task = _fetch_with_fallback_paths(
         settings=settings,
         access_token=access_token,
-        path_with_query=f"MedicationRequest?patient={patient_id}&_count=20",
+        candidate_paths=[
+            f"MedicationRequest?patient={encoded_patient_id}&_count=20&_include=MedicationRequest:medication",
+            f"MedicationRequest?subject={patient_reference}&_count=20&_include=MedicationRequest:medication",
+            f"MedicationRequest?subject={encoded_patient_id}&_count=20&_include=MedicationRequest:medication",
+        ],
+        required_scopes=["patient/MedicationRequest.read"],
+        granted_scope=granted_scope,
     )
-    documents = await try_fetch_fhir_json(
+    documents_task = _fetch_with_fallback_paths(
         settings=settings,
         access_token=access_token,
-        path_with_query=f"DocumentReference?patient={patient_id}&_count=20",
+        candidate_paths=[
+            f"DocumentReference?patient={encoded_patient_id}&_count=20",
+            f"DocumentReference?subject={patient_reference}&_count=20",
+        ],
+        required_scopes=["patient/DocumentReference.read"],
+        granted_scope=granted_scope,
     )
-    allergies = await try_fetch_fhir_json(
+    allergies_task = _fetch_with_fallback_paths(
         settings=settings,
         access_token=access_token,
-        path_with_query=f"AllergyIntolerance?patient={patient_id}&_count=20",
+        candidate_paths=[
+            f"AllergyIntolerance?patient={encoded_patient_id}&_count=20",
+            f"AllergyIntolerance?subject={patient_reference}&_count=20",
+            f"AllergyIntolerance?subject={encoded_patient_id}&_count=20",
+        ],
+        required_scopes=["patient/AllergyIntolerance.read"],
+        granted_scope=granted_scope,
     )
-    appointments = await try_fetch_fhir_json(
+    appointments_task = _fetch_with_fallback_paths(
         settings=settings,
         access_token=access_token,
-        path_with_query=f"Appointment?patient={patient_id}&_count=20",
+        candidate_paths=[
+            f"Appointment?patient={encoded_patient_id}&_count=20",
+            f"Appointment?actor={patient_reference}&_count=20",
+        ],
+        required_scopes=["patient/Appointment.read"],
+        granted_scope=granted_scope,
     )
-    care_plan = await try_fetch_fhir_json(
+    care_plan_task = _fetch_with_fallback_paths(
         settings=settings,
         access_token=access_token,
-        path_with_query=f"CarePlan?patient={patient_id}&_count=20",
+        candidate_paths=[
+            f"CarePlan?patient={encoded_patient_id}&_count=20",
+            f"CarePlan?subject={patient_reference}&_count=20",
+        ],
+        required_scopes=["patient/CarePlan.read"],
+        granted_scope=granted_scope,
+    )
+
+    (
+        conditions,
+        observations,
+        medications,
+        documents,
+        allergies,
+        appointments,
+        care_plan,
+    ) = await asyncio.gather(
+        conditions_task,
+        observations_task,
+        medications_task,
+        documents_task,
+        allergies_task,
+        appointments_task,
+        care_plan_task,
     )
 
     return {

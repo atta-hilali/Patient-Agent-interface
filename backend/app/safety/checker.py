@@ -59,6 +59,14 @@ TOPIC_CONTROL_MESSAGE_KEYS = {
     "mental_health_therapy": "topic_control_mental_health_therapy",
 }
 
+TOPIC_CONTROL_FALLBACK_BLOCKED = {
+    "diagnosis",
+    "prescribing",
+    "dosage_change",
+    "emergency_assessment",
+    "mental_health_therapy",
+}
+
 
 @dataclass
 class SafetyResult:
@@ -149,8 +157,6 @@ class SafetyChecker:
             return endpoint_url.split("/v1/", 1)[0].rstrip("/")
 
     async def _resolve_chat_model(self, base_url: str, preferred: str) -> str:
-        if preferred:
-            return preferred
         cached = self._model_cache.get(base_url)
         if cached:
             return cached
@@ -160,13 +166,86 @@ class SafetyChecker:
                 response = await client.get(f"{base_url}/v1/models")
                 response.raise_for_status()
                 payload = response.json()
-            first = ((payload or {}).get("data") or [{}])[0]
-            model_id = str(first.get("id") or "").strip() or "model"
+            raw_items = (payload or {}).get("data") or []
+            available = [
+                str(item.get("id") or "").strip()
+                for item in raw_items
+                if isinstance(item, dict) and str(item.get("id") or "").strip()
+            ]
         except Exception:  # noqa: BLE001
             model_id = "model"
+            if preferred:
+                model_id = preferred
+            self._model_cache[base_url] = model_id
+            return model_id
+
+        if not available:
+            model_id = preferred or "model"
+            self._model_cache[base_url] = model_id
+            return model_id
+
+        normalized_available = {str(item).strip().lower(): str(item).strip() for item in available if str(item).strip()}
+        normalized_preferred = (preferred or "").strip().lower()
+
+        if normalized_preferred and normalized_preferred in normalized_available:
+            model_id = normalized_available[normalized_preferred]
+        elif normalized_preferred:
+            # Match with small naming differences, for example:
+            # "llama-nemotron-topic-guard-v1" vs aliases returned by /v1/models.
+            model_id = next(
+                (
+                    item
+                    for item in available
+                    if normalized_preferred in item.lower() or item.lower() in normalized_preferred
+                ),
+                "",
+            )
+            if not model_id:
+                model_id = str(available[0]).strip() if available else preferred
+        else:
+            model_id = str(available[0]).strip() if available else "model"
 
         self._model_cache[base_url] = model_id
         return model_id
+
+    def _candidate_guardrail_urls(self, endpoint_url: str) -> list[str]:
+        cleaned = (endpoint_url or "").strip().rstrip("/")
+        if not cleaned:
+            return []
+        base_url = self._base_url(cleaned)
+        candidates: list[str] = []
+        if cleaned.endswith("/v1/guardrail"):
+            candidates.append(cleaned)
+        if cleaned.endswith("/v1/chat/completions"):
+            candidates.append(f"{base_url}/v1/guardrail")
+        if "/v1/" not in cleaned:
+            candidates.append(f"{cleaned}/v1/guardrail")
+            candidates.append(f"{base_url}/v1/guardrail")
+        if f"{base_url}/v1/guardrail" not in candidates:
+            candidates.append(f"{base_url}/v1/guardrail")
+        deduped: list[str] = []
+        for item in candidates:
+            if item not in deduped:
+                deduped.append(item)
+        return deduped
+
+    def _topic_block_is_actionable(self, response: dict[str, Any], config: dict[str, Any]) -> bool:
+        if not response.get("blocked"):
+            return False
+        category = self._normalize_category(str(response.get("category") or ""), "")
+        action = str(response.get("action") or "").strip().lower()
+        blocked_topics = {
+            self._normalize_category(str(item), "")
+            for item in (config or {}).get("blocked_topics", [])
+            if str(item).strip()
+        }
+        if category and category in blocked_topics:
+            return True
+        if category and category in TOPIC_CONTROL_FALLBACK_BLOCKED:
+            return True
+        if action == "redirect" and category:
+            return True
+        return False
 
     def _extract_json_object(self, raw: str) -> dict[str, Any]:
         text = (raw or "").strip()
@@ -281,51 +360,74 @@ class SafetyChecker:
         return {"blocked": False, "category": "safe", "severity": "LOW", "action": "allow"}
 
     async def _call_content_safety(self, role: str, text: str) -> dict[str, Any]:
+        guardrail_errors: list[Exception] = []
         async with httpx.AsyncClient(timeout=5.0) as client:
-            try:
-                response = await client.post(
-                    self.content_safety_url,
-                    json={"messages": [{"role": role, "content": text}]},
-                )
-                response.raise_for_status()
-                return response.json()
-            except httpx.HTTPStatusError as exc:
-                status = exc.response.status_code if exc.response is not None else 0
-                # Some NemoGuard deployments expose OpenAI chat API instead of /v1/guardrail.
-                if status in {404, 405}:
-                    return await self._call_guardrail_chat(
-                        endpoint_url=self.content_safety_url,
-                        role=role,
-                        text=text,
-                        blocked_by="content_safety",
-                        model_name=self.content_model,
+            for guardrail_url in self._candidate_guardrail_urls(self.content_safety_url):
+                try:
+                    response = await client.post(
+                        guardrail_url,
+                        json={"messages": [{"role": role, "content": text}]},
                     )
-                raise
+                    response.raise_for_status()
+                    return response.json()
+                except httpx.HTTPStatusError as exc:
+                    guardrail_errors.append(exc)
+                    status = exc.response.status_code if exc.response is not None else 0
+                    if status in {404, 405, 415, 422}:
+                        continue
+                    raise
+                except Exception as exc:  # noqa: BLE001
+                    guardrail_errors.append(exc)
+
+        try:
+            return await self._call_guardrail_chat(
+                endpoint_url=self.content_safety_url,
+                role=role,
+                text=text,
+                blocked_by="content_safety",
+                model_name=self.content_model,
+            )
+        except Exception as exc:  # noqa: BLE001
+            if guardrail_errors:
+                raise guardrail_errors[-1] from exc
+            raise
 
     async def _call_topic_control(self, role: str, text: str, config: dict[str, Any]) -> dict[str, Any]:
+        guardrail_errors: list[Exception] = []
         async with httpx.AsyncClient(timeout=5.0) as client:
-            try:
-                response = await client.post(
-                    self.topic_control_url,
-                    json={"messages": [{"role": role, "content": text}], "config": config},
-                )
-                response.raise_for_status()
-                return response.json()
-            except httpx.HTTPStatusError as exc:
-                status = exc.response.status_code if exc.response is not None else 0
-                if status in {404, 405}:
-                    return await self._call_guardrail_chat(
-                        endpoint_url=self.topic_control_url,
-                        role=role,
-                        text=text,
-                        blocked_by="topic_control",
-                        model_name=self.topic_model,
-                        topic_config=config,
+            for guardrail_url in self._candidate_guardrail_urls(self.topic_control_url):
+                try:
+                    response = await client.post(
+                        guardrail_url,
+                        json={"messages": [{"role": role, "content": text}], "config": config},
                     )
-                raise
+                    response.raise_for_status()
+                    return response.json()
+                except httpx.HTTPStatusError as exc:
+                    guardrail_errors.append(exc)
+                    status = exc.response.status_code if exc.response is not None else 0
+                    if status in {404, 405, 415, 422}:
+                        continue
+                    raise
+                except Exception as exc:  # noqa: BLE001
+                    guardrail_errors.append(exc)
+
+        try:
+            return await self._call_guardrail_chat(
+                endpoint_url=self.topic_control_url,
+                role=role,
+                text=text,
+                blocked_by="topic_control",
+                model_name=self.topic_model,
+                topic_config=config,
+            )
+        except Exception as exc:  # noqa: BLE001
+            if guardrail_errors:
+                raise guardrail_errors[-1] from exc
+            raise
 
     def _normalize_category(self, category: str | None, fallback: str) -> str:
-        normalized = (category or fallback).strip().lower().replace(" ", "_")
+        normalized = (category or fallback).strip().lower().replace(" ", "_").replace("-", "_")
         return normalized or fallback
 
     def _content_safety_message_key(self, category: str | None) -> str:
@@ -390,7 +492,7 @@ class SafetyChecker:
             except Exception as exc:  # noqa: BLE001
                 return self._unreachable_result(role=role, error=exc)
 
-            if tc_response.get("blocked"):
+            if self._topic_block_is_actionable(tc_response, config):
                 category = self._normalize_category(tc_response.get("category"), "topic_control")
                 logger.info(
                     "NemoGuard topic control blocked. category=%s severity=%s",
@@ -406,6 +508,12 @@ class SafetyChecker:
                     action=tc_response.get("action", "redirect"),
                     message_key=self._topic_control_message_key(category),
                     discarded_draft=role == "assistant",
+                )
+            if tc_response.get("blocked"):
+                logger.info(
+                    "NemoGuard topic-control block ignored as non-actionable. category=%s action=%s",
+                    tc_response.get("category"),
+                    tc_response.get("action"),
                 )
 
         return SafetyResult(safe=True, action="allow")
@@ -471,7 +579,7 @@ class SafetyChecker:
                 discarded_draft=role == "assistant",
             )
 
-        if isinstance(tc_response, dict) and tc_response.get("blocked"):
+        if isinstance(tc_response, dict) and self._topic_block_is_actionable(tc_response, config):
             category = self._normalize_category(tc_response.get("category"), "topic_control")
             logger.info("NemoGuard topic control blocked. category=%s severity=%s", category, tc_response.get("severity"))
             return SafetyResult(
@@ -483,6 +591,12 @@ class SafetyChecker:
                 action=tc_response.get("action", "redirect"),
                 message_key=self._topic_control_message_key(category),
                 discarded_draft=role == "assistant",
+            )
+        if isinstance(tc_response, dict) and tc_response.get("blocked"):
+            logger.info(
+                "NemoGuard topic-control block ignored as non-actionable. category=%s action=%s",
+                tc_response.get("category"),
+                tc_response.get("action"),
             )
 
         return SafetyResult(safe=True, action="allow")

@@ -8,11 +8,18 @@ set -euo pipefail
 : "${NEMOGUARD_CS_HOST_PORT:=8002}"
 : "${NEMOGUARD_CS_CONTAINER_PORT:=8000}"
 : "${NEMOGUARD_CS_MODEL_NAME:=llama-nemotron-safety-guard-v2}"
+: "${NEMOGUARD_CS_ENABLED:=true}"
 # Use this profile on GB10 / ARM systems when TRT profile crashes:
 : "${NEMOGUARD_CS_MODEL_PROFILE:=4f904d571fe60ff24695b5ee2aa42da58cb460787a968f1e8a09f5a7e862728d}"
 : "${NEMOGUARD_CS_GPU_DEVICE:=0}"
 : "${NEMOGUARD_CS_SHM_SIZE:=16GB}"
 : "${NEMOGUARD_CS_USE_NVIDIA_RUNTIME:=auto}"
+: "${ALLOW_OVERSUBSCRIBE:=false}"
+
+if [[ "$NEMOGUARD_CS_ENABLED" != "true" ]]; then
+  echo "NemoGuard Content Safety startup skipped (NEMOGUARD_CS_ENABLED=false)."
+  exit 0
+fi
 
 mkdir -p "$LOCAL_NIM_CACHE"
 chmod 700 "$LOCAL_NIM_CACHE" || true
@@ -26,6 +33,23 @@ echo "Port:      $NEMOGUARD_CS_HOST_PORT -> $NEMOGUARD_CS_CONTAINER_PORT"
 echo "Profile:   $NEMOGUARD_CS_MODEL_PROFILE"
 echo "GPU:       $NEMOGUARD_CS_GPU_DEVICE"
 echo "SHM:       $NEMOGUARD_CS_SHM_SIZE"
+
+if command -v nvidia-smi >/dev/null 2>&1; then
+  mem_line="$(nvidia-smi --query-gpu=memory.used,memory.total --format=csv,noheader,nounits -i "$NEMOGUARD_CS_GPU_DEVICE" 2>/dev/null || true)"
+  if [[ -n "$mem_line" ]]; then
+    used_mem="$(echo "$mem_line" | awk -F',' '{gsub(/ /, "", $1); print $1}')"
+    total_mem="$(echo "$mem_line" | awk -F',' '{gsub(/ /, "", $2); print $2}')"
+    if [[ "$used_mem" =~ ^[0-9]+$ && "$total_mem" =~ ^[0-9]+$ && "$total_mem" -gt 0 ]]; then
+      used_pct=$(( 100 * used_mem / total_mem ))
+      echo "GPU memory before start: ${used_mem}MiB / ${total_mem}MiB (${used_pct}%)"
+      if (( used_pct >= 85 )) && [[ "$ALLOW_OVERSUBSCRIBE" != "true" ]]; then
+        echo "GPU is already above 85% memory. Refusing to start content safety to avoid DGX crash."
+        echo "Set ALLOW_OVERSUBSCRIBE=true if you want to force start."
+        exit 1
+      fi
+    fi
+  fi
+fi
 
 USE_RUNTIME="false"
 if [[ "$NEMOGUARD_CS_USE_NVIDIA_RUNTIME" == "true" ]]; then

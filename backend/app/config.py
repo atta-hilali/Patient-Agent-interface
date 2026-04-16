@@ -193,7 +193,7 @@ def get_settings() -> Settings:
         nemoguard_fail_open=_as_bool(os.getenv("NEMOGUARD_FAIL_OPEN"), True),
         nemoguard_strict_order=_as_bool(os.getenv("NEMOGUARD_STRICT_ORDER"), True),
         nemoguard_content_model=_clean_string(os.getenv("NEMOGUARD_CONTENT_MODEL", "llama-nemotron-safety-guard-v2")),
-        nemoguard_topic_model=_clean_string(os.getenv("NEMOGUARD_TOPIC_MODEL", "llama-nemotron-topic-control-v2")),
+        nemoguard_topic_model=_clean_string(os.getenv("NEMOGUARD_TOPIC_MODEL", "llama-nemotron-topic-guard-v1")),
         medgemma_base_url=_clean_string(os.getenv("MEDGEMMA_BASE_URL", "http://127.0.0.1:8001/v1")),
         medgemma_api_key=_clean_string(os.getenv("MEDGEMMA_API_KEY", "not-used")),
         medgemma_mode=_clean_string(os.getenv("MEDGEMMA_MODE", "mvp")),
