@@ -108,6 +108,35 @@ class Settings:
     medgemma_sprint3_model: str
     medgemma_max_tokens: int
 
+    database_url: str
+    rag_enabled: bool
+    rag_embed_url: str
+    rag_rerank_url: str
+    rag_timeout_sec: int
+    rag_top_k: int
+    rag_rerank_top_n: int
+    rag_chunk_size: int
+    rag_chunk_overlap: int
+
+    terminology_enabled: bool
+    terminology_use_network: bool
+    terminology_timeout_sec: int
+    terminology_max_parallel: int
+    terminology_cache_ttl_sec: int
+    terminology_rxnorm_base_url: str
+    terminology_snomed_lookup_url: str
+    terminology_icd10_lookup_url: str
+    terminology_umls_api_key: str
+
+    vault_enabled: bool
+    vault_addr: str
+    vault_token: str
+    vault_mount: str
+    vault_kv_version: int
+
+    immutable_audit_enabled: bool
+    immutable_audit_file: str
+
     tts_nim_url: str
 
 
@@ -200,5 +229,34 @@ def get_settings() -> Settings:
         medgemma_mvp_model=_clean_string(os.getenv("MEDGEMMA_MVP_MODEL", "google/medgemma-4b-it")),
         medgemma_sprint3_model=_clean_string(os.getenv("MEDGEMMA_SPRINT3_MODEL", "google/medgemma-27b-it")),
         medgemma_max_tokens=_as_int(os.getenv("MEDGEMMA_MAX_TOKENS"), 1024),
+        database_url=_clean_string(os.getenv("DATABASE_URL", "")),
+        rag_enabled=_as_bool(os.getenv("RAG_ENABLED"), True),
+        rag_embed_url=_clean_string(os.getenv("RAG_EMBED_URL", "http://127.0.0.1:8006/v1/embeddings")),
+        rag_rerank_url=_clean_string(os.getenv("RAG_RERANK_URL", "http://127.0.0.1:8007/v1/rerank")),
+        rag_timeout_sec=_as_int(os.getenv("RAG_TIMEOUT_SEC"), 5),
+        rag_top_k=_as_int(os.getenv("RAG_TOP_K"), 10),
+        rag_rerank_top_n=_as_int(os.getenv("RAG_RERANK_TOP_N"), 5),
+        rag_chunk_size=_as_int(os.getenv("RAG_CHUNK_SIZE"), 512),
+        rag_chunk_overlap=_as_int(os.getenv("RAG_CHUNK_OVERLAP"), 64),
+        terminology_enabled=_as_bool(os.getenv("TERMINOLOGY_ENABLED"), True),
+        terminology_use_network=_as_bool(os.getenv("TERMINOLOGY_USE_NETWORK"), True),
+        terminology_timeout_sec=_as_int(os.getenv("TERMINOLOGY_TIMEOUT_SEC"), 5),
+        terminology_max_parallel=_as_int(os.getenv("TERMINOLOGY_MAX_PARALLEL"), 8),
+        terminology_cache_ttl_sec=_as_int(os.getenv("TERMINOLOGY_CACHE_TTL_SEC"), 86400),
+        terminology_rxnorm_base_url=_clean_string(os.getenv("TERMINOLOGY_RXNORM_BASE_URL", "https://rxnav.nlm.nih.gov")),
+        terminology_snomed_lookup_url=_clean_string(
+            os.getenv("TERMINOLOGY_SNOMED_LOOKUP_URL", "https://clinicaltables.nlm.nih.gov/api/conditions/v3/search")
+        ),
+        terminology_icd10_lookup_url=_clean_string(
+            os.getenv("TERMINOLOGY_ICD10_LOOKUP_URL", "https://clinicaltables.nlm.nih.gov/api/icd10cm/v3/search")
+        ),
+        terminology_umls_api_key=_clean_string(os.getenv("TERMINOLOGY_UMLS_API_KEY", "")),
+        vault_enabled=_as_bool(os.getenv("VAULT_ENABLED"), False),
+        vault_addr=_clean_string(os.getenv("VAULT_ADDR", "")),
+        vault_token=_clean_string(os.getenv("VAULT_TOKEN", "")),
+        vault_mount=_clean_string(os.getenv("VAULT_MOUNT", "secret/data")),
+        vault_kv_version=_as_int(os.getenv("VAULT_KV_VERSION"), 2),
+        immutable_audit_enabled=_as_bool(os.getenv("IMMUTABLE_AUDIT_ENABLED"), True),
+        immutable_audit_file=_clean_string(os.getenv("IMMUTABLE_AUDIT_FILE", "backend/compliance/audit_chain.jsonl")),
         tts_nim_url=_clean_string(os.getenv("TTS_NIM_URL", "http://127.0.0.1:8000/v1/tts")),
     )

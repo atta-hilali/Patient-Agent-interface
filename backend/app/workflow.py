@@ -11,6 +11,7 @@ from .config import Settings
 from .models import ConflictItem, WorkflowSnapshot, WorkflowUnlockResponse
 from .prompt_builder import build_prompt_package
 from .session_cache import SessionCache
+from .terminology import get_terminology_normalizer
 
 
 def _now_iso() -> str:
@@ -123,7 +124,13 @@ class WorkflowService:
         context.sourceId = source_id
         context.patientId = context.patientId or patient_id
         context.fetchedAt = _now_iso()
-        context.allergyConflicts = self._compute_allergy_conflicts(context)
+        try:
+            normalizer = get_terminology_normalizer()
+            context = await normalizer.enrich_context(context)
+            inferred_conflicts = await normalizer.infer_conflicts(context)
+            context.allergyConflicts = inferred_conflicts or self._compute_allergy_conflicts(context)
+        except Exception:  # noqa: BLE001
+            context.allergyConflicts = self._compute_allergy_conflicts(context)
         context.meta["adapter"] = resolution.adapter_name
 
         prompt_package = build_prompt_package(context)

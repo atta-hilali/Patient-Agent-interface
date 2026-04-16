@@ -248,3 +248,49 @@ Expected:
 - Epic OAuth loop works.
 - Text/voice/image all return non-empty replies.
 
+## 16) Write-back abstraction checks
+
+Run these API checks after a valid session is created:
+
+```bash
+curl -s -X POST http://127.0.0.1:8001/writeback/session-summary \
+  -H "Content-Type: application/json" \
+  -d '{"sessionId":"<SESSION_ID>","patientId":"<PATIENT_ID>","summary":"Session summary test"}'
+
+curl -s -X POST http://127.0.0.1:8001/writeback/observation \
+  -H "Content-Type: application/json" \
+  -d '{"sessionId":"<SESSION_ID>","patientId":"<PATIENT_ID>","loincCode":"72514-3","value":"5","unit":"score"}'
+
+curl -s -X POST http://127.0.0.1:8001/writeback/flag \
+  -H "Content-Type: application/json" \
+  -d '{"sessionId":"<SESSION_ID>","patientId":"<PATIENT_ID>","reason":"test-escalation","severity":"HIGH"}'
+```
+
+Expected:
+
+- all responses return `"ok": true` for configured write-back paths
+- response includes adapter/source info for auditability
+
+## 17) RAG production checks
+
+```bash
+curl -s http://127.0.0.1:8001/rag/health
+```
+
+Expected:
+
+- `enabled=true` when RAG is enabled
+- `database=true` and embed/reranker health true in full production mode
+
+## 18) Compliance checks
+
+```bash
+curl -s http://127.0.0.1:8001/compliance/audit/verify
+curl -s http://127.0.0.1:8001/compliance/hipaa-checklist
+python scripts/12_check_hipaa_gate.py
+```
+
+Expected:
+
+- audit chain verifies with `ok=true`
+- HIPAA checklist reports all required controls passed before release

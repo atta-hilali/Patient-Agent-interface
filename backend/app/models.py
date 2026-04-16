@@ -47,6 +47,8 @@ class MedicationItem(BaseModel):
 class ConditionItem(BaseModel):
     id: str = ""
     name: str = ""
+    snomedCode: str = ""
+    icd10Code: str = ""
     clinicalStatus: str = ""
     verificationStatus: str = ""
     onsetDate: str = ""
@@ -58,6 +60,7 @@ class ConditionItem(BaseModel):
 class AllergyItem(BaseModel):
     id: str = ""
     substance: str = ""
+    rxcui: str = ""
     criticality: str = ""
     status: str = ""
     reaction: str = ""
@@ -259,3 +262,37 @@ class ContextSummary(BaseModel):
     next_appointment: str | None = None
     session_expires_at: str | None = None
     data_source: str | None = None
+
+
+class WriteBackSessionSummaryRequest(BaseModel):
+    sessionId: str = Field(min_length=1)
+    patientId: str = Field(min_length=1)
+    summary: str = Field(min_length=1)
+    clinicId: str = ""
+
+
+class WriteBackObservationRequest(BaseModel):
+    sessionId: str = Field(min_length=1)
+    patientId: str = Field(min_length=1)
+    loincCode: str = Field(min_length=1)
+    value: str = Field(min_length=1)
+    unit: str = ""
+    clinicId: str = ""
+
+
+class WriteBackFlagRequest(BaseModel):
+    sessionId: str = Field(min_length=1)
+    patientId: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
+    severity: str = "HIGH"
+    clinicId: str = ""
+
+
+class WriteBackResponse(BaseModel):
+    ok: bool
+    operation: str
+    clinicId: str
+    sourceType: str
+    adapter: str
+    resourceType: str
+    detail: dict[str, Any] = Field(default_factory=dict)

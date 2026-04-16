@@ -29,3 +29,15 @@ jobs:
         env:
           PYTHONPATH: .
         run: pytest -q
+      - name: Safety Release Gate
+        env:
+          PYTHONPATH: .
+          NEMOGUARD_ENABLED: "true"
+          NEMOGUARD_CONTENT_ENABLED: "true"
+          NEMOGUARD_TOPIC_ENABLED: "true"
+          NEMOGUARD_FAIL_OPEN: "false"
+          NEMOGUARD_STRICT_ORDER: "true"
+        run: |
+          pytest -q tests/test_preflight.py
+          pytest -q tests/test_safety_checker.py
+          pytest -q tests/test_safety_checker.py::SafetyCheckerTests::test_adversarial_suite_of_200_cases

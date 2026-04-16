@@ -9,7 +9,7 @@ from typing import Any, Literal
 
 from fastapi import Depends, HTTPException
 from fastapi.security import APIKeyHeader
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 from .config import Settings, get_settings
 
@@ -26,7 +26,8 @@ class ConnectorConfig(BaseModel):
     cache_ttl_s: int = 300
     active: bool = True
 
-    @validator("clinic_id", pre=True)
+    @field_validator("clinic_id", mode="before")
+    @classmethod
     def _normalize_id(cls, value: str) -> str:  # noqa: D401
         return (value or "").strip()
 

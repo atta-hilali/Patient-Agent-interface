@@ -13,6 +13,9 @@ from fastapi.responses import RedirectResponse
 from .agent.llm_client import get_llm_health
 from .asr import decode_base64_audio, transcribe_audio
 from .cache import WorkflowCache, get_session_cache
+from .compliance.audit import get_audit_logger
+from .compliance.checklist import get_hipaa_checklist_service
+from .compliance.secrets import get_secret_resolver
 from .config import get_settings
 from .epic import (
     build_authorize_url,
@@ -30,13 +33,19 @@ from .models import (
     Hl7IngestRequest,
     NormalizeRequest,
     SafetyCheckRequest,
+    WriteBackFlagRequest,
+    WriteBackObservationRequest,
+    WriteBackResponse,
+    WriteBackSessionSummaryRequest,
     WorkflowIngestRequest,
     WorkflowUnlockRequest,
 )
+from .writeback import get_writeback_service
 from .hl7_mllp import Hl7MllpListener
 from .oauth_state import OAuthStateStore
 from .routers.agent import router as agent_router
 from .routers.audio import router as audio_router
+from .routers.rag import router as rag_router
 from .routers.tts import router as tts_router
 from .safety import run_preflight_safety_check
 from .workflow import WorkflowService, run_workflow_pipeline
@@ -53,6 +62,7 @@ session_cache = get_session_cache()
 workflow_service = WorkflowService(settings=settings, cache=workflow_cache)
 hl7_listener: Hl7MllpListener | None = None
 hl7_recent_messages: list[dict[str, Any]] = []
+startup_secret_status: dict[str, Any] = {"ok": True, "missing": [], "resolved": {}}
 
 app = FastAPI(title=settings.app_name)
 
@@ -65,6 +75,7 @@ app.add_middleware(
 )
 app.include_router(agent_router)
 app.include_router(audio_router)
+app.include_router(rag_router)
 app.include_router(tts_router)
 
 
@@ -91,6 +102,25 @@ async def _handle_mllp_message(message: str, peer: str) -> dict[str, Any]:
 
 @app.on_event("startup")
 async def startup_event() -> None:
+    global startup_secret_status
+    startup_secret_status = await get_secret_resolver().assert_required(
+        ["STATE_SIGNING_KEY", "CONTEXT_ENCRYPTION_KEY", "MEDGEMMA_BASE_URL"]
+    )
+    if settings.vault_enabled and not startup_secret_status.get("ok", False):
+        raise RuntimeError(
+            f"Vault secret bootstrap failed. Missing keys: {', '.join(startup_secret_status.get('missing', []))}"
+        )
+
+    get_audit_logger().append(
+        event_type="startup",
+        payload={
+            "service": settings.app_name,
+            "env": settings.env,
+            "vault_enabled": settings.vault_enabled,
+            "secret_status_ok": startup_secret_status.get("ok", False),
+        },
+    )
+
     await workflow_cache.ping()
 
     global hl7_listener
@@ -109,6 +139,10 @@ async def shutdown_event() -> None:
     if hl7_listener:
         await hl7_listener.stop()
         hl7_listener = None
+    get_audit_logger().append(
+        event_type="shutdown",
+        payload={"service": settings.app_name, "env": settings.env},
+    )
 
 
 @app.get("/health")
@@ -118,6 +152,7 @@ async def health() -> dict[str, Any]:
         "service": settings.app_name,
         "env": settings.env,
         "llm": get_llm_health(),
+        "secrets": {"ok": startup_secret_status.get("ok", False), "missing_count": len(startup_secret_status.get("missing", []))},
     }
 
 
@@ -209,12 +244,24 @@ async def auth_epic_callback(
     error_description: str = Query(default=""),
 ) -> dict[str, Any]:
     if error:
+        get_audit_logger().append(
+            event_type="auth_callback_error",
+            payload={"error": error, "error_description": error_description},
+        )
         raise HTTPException(status_code=400, detail=f"Epic returned error={error} {error_description}".strip())
     if not code or not state:
+        get_audit_logger().append(
+            event_type="auth_callback_error",
+            payload={"error": "missing_code_or_state"},
+        )
         raise HTTPException(status_code=400, detail="Missing code or state.")
 
     state_entry = await oauth_state_store.pop_valid(state)
     if not state_entry:
+        get_audit_logger().append(
+            event_type="auth_callback_error",
+            payload={"error": "invalid_state"},
+        )
         raise HTTPException(status_code=400, detail="State is invalid or expired.")
 
     try:
@@ -250,10 +297,27 @@ async def auth_epic_callback(
             session_id=session_id,
             session_cache=session_cache,
         )
+        get_audit_logger().append(
+            event_type="auth_callback_success",
+            payload={
+                "clinic_id": auth_token.clinic_id,
+                "adapter_type": auth_token.adapter_type,
+                "patient_id": patient_id,
+                "scope_count": len(auth_token.scope_list),
+            },
+        )
     except httpx.HTTPStatusError as exc:
         detail = exc.response.text if exc.response is not None else str(exc)
+        get_audit_logger().append(
+            event_type="auth_callback_http_error",
+            payload={"status_code": exc.response.status_code if exc.response is not None else 0},
+        )
         raise HTTPException(status_code=502, detail=f"Epic HTTP error: {detail}") from exc
     except Exception as exc:  # noqa: BLE001
+        get_audit_logger().append(
+            event_type="auth_callback_exception",
+            payload={"error": str(exc)},
+        )
         raise HTTPException(status_code=500, detail=f"Epic callback processing failed: {exc}") from exc
 
     return {
@@ -459,3 +523,81 @@ async def workflow_unlock_check(request: WorkflowUnlockRequest) -> dict[str, Any
         consent_accepted=request.consentAccepted,
     )
     return result.model_dump(mode="json")
+
+
+@app.get("/compliance/audit/verify")
+async def compliance_verify_audit() -> dict[str, Any]:
+    return get_audit_logger().verify_chain()
+
+
+@app.get("/compliance/secrets/status")
+async def compliance_secrets_status() -> dict[str, Any]:
+    return startup_secret_status
+
+
+@app.get("/compliance/hipaa-checklist")
+async def compliance_hipaa_checklist() -> dict[str, Any]:
+    return await get_hipaa_checklist_service().evaluate()
+
+
+@app.post("/writeback/session-summary")
+async def writeback_session_summary(request: WriteBackSessionSummaryRequest) -> dict[str, Any]:
+    result = await get_writeback_service().write_session_summary(
+        session_id=request.sessionId,
+        patient_id=request.patientId,
+        summary=request.summary,
+        clinic_id=request.clinicId or None,
+    )
+    response = WriteBackResponse(
+        ok=result.ok,
+        operation=result.operation,
+        clinicId=result.clinic_id,
+        sourceType=result.source_type,
+        adapter=result.adapter,
+        resourceType=result.resource_type,
+        detail=result.detail,
+    )
+    return response.model_dump(mode="json")
+
+
+@app.post("/writeback/observation")
+async def writeback_observation(request: WriteBackObservationRequest) -> dict[str, Any]:
+    result = await get_writeback_service().write_observation(
+        session_id=request.sessionId,
+        patient_id=request.patientId,
+        loinc_code=request.loincCode,
+        value=request.value,
+        unit=request.unit,
+        clinic_id=request.clinicId or None,
+    )
+    response = WriteBackResponse(
+        ok=result.ok,
+        operation=result.operation,
+        clinicId=result.clinic_id,
+        sourceType=result.source_type,
+        adapter=result.adapter,
+        resourceType=result.resource_type,
+        detail=result.detail,
+    )
+    return response.model_dump(mode="json")
+
+
+@app.post("/writeback/flag")
+async def writeback_flag(request: WriteBackFlagRequest) -> dict[str, Any]:
+    result = await get_writeback_service().write_flag(
+        session_id=request.sessionId,
+        patient_id=request.patientId,
+        reason=request.reason,
+        severity=request.severity,
+        clinic_id=request.clinicId or None,
+    )
+    response = WriteBackResponse(
+        ok=result.ok,
+        operation=result.operation,
+        clinicId=result.clinic_id,
+        sourceType=result.source_type,
+        adapter=result.adapter,
+        resourceType=result.resource_type,
+        detail=result.detail,
+    )
+    return response.model_dump(mode="json")

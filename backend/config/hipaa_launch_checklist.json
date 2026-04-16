@@ -1,0 +1,39 @@
+[
+  {
+    "id": "safety_gate_enforced",
+    "description": "NemoGuard fail-open disabled and strict order enabled in runtime config",
+    "source": "automatic",
+    "required": true
+  },
+  {
+    "id": "immutable_audit_chain_ok",
+    "description": "Immutable audit log hash-chain verifies without tampering",
+    "source": "automatic",
+    "required": true
+  },
+  {
+    "id": "redis_required_enabled",
+    "description": "Redis is required for production session/token context caches",
+    "source": "automatic",
+    "required": true
+  },
+  {
+    "id": "vault_or_secret_baseline",
+    "description": "Vault is enabled or baseline required secrets are present in environment",
+    "source": "automatic",
+    "required": true
+  },
+  {
+    "id": "clinical_signoff",
+    "description": "Licensed clinician approved patient-facing safety behavior",
+    "source": "manual",
+    "required": true
+  },
+  {
+    "id": "compliance_signoff",
+    "description": "Compliance reviewer approved HIPAA controls and retention policy",
+    "source": "manual",
+    "required": true
+  }
+]
+

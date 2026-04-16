@@ -34,7 +34,21 @@ Copy `.env.example` to `.env` and set:
   - `NEMOGUARD_STRICT_ORDER=true`
   - model ids for OpenAI-compatible fallback mode:
     - `NEMOGUARD_CONTENT_MODEL=llama-nemotron-safety-guard-v2`
-    - `NEMOGUARD_TOPIC_MODEL=llama-nemotron-topic-control-v2`
+    - `NEMOGUARD_TOPIC_MODEL=llama-nemotron-topic-guard-v1`
+- RAG settings:
+  - `DATABASE_URL`
+  - `RAG_ENABLED`
+  - `RAG_EMBED_URL`
+  - `RAG_RERANK_URL`
+- terminology normalization:
+  - `TERMINOLOGY_ENABLED`
+  - `TERMINOLOGY_RXNORM_BASE_URL`
+  - `TERMINOLOGY_SNOMED_LOOKUP_URL`
+  - `TERMINOLOGY_ICD10_LOOKUP_URL`
+  - `TERMINOLOGY_UMLS_API_KEY` (optional for SNOMED -> ICD10 crosswalk)
+- compliance hardening:
+  - `VAULT_ENABLED`, `VAULT_ADDR`, `VAULT_TOKEN`, `VAULT_MOUNT`
+  - `IMMUTABLE_AUDIT_ENABLED`, `IMMUTABLE_AUDIT_FILE`
 
 ## 2. Run
 
@@ -88,6 +102,15 @@ Optional environment variables:
 - `POST /agent/chat` (SSE stream for Phase 2 per-turn loop)
 - `GET /ws/audio/{session_id}` (WebSocket audio stream in, transcript events out)
 - `POST /tts/synthesize` (optional TTS proxy)
+- `GET /rag/health`
+- `POST /rag/ingest`
+- `POST /rag/search`
+- `POST /writeback/session-summary`
+- `POST /writeback/observation`
+- `POST /writeback/flag`
+- `GET /compliance/audit/verify`
+- `GET /compliance/secrets/status`
+- `GET /compliance/hipaa-checklist`
 
 ## 4. Workflow architecture
 
@@ -149,6 +172,21 @@ python -m venv .venv
 pip install -r requirements-dev.txt
 $env:PYTHONPATH="."
 pytest -q
+```
+
+Run strict safety release gate (Linux shell):
+
+```bash
+cd backend
+chmod +x scripts/11_safety_release_gate.sh
+./scripts/11_safety_release_gate.sh
+```
+
+Run HIPAA checklist gate:
+
+```bash
+cd backend
+python scripts/12_check_hipaa_gate.py
 ```
 
 On DGX/Linux:

@@ -4,7 +4,10 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
+import httpx
+
 from .cda_parser import parse_cda_xml
+from .connectors import ConnectorConfig
 from .csv_mapper import apply_csv_mapping
 from .hl7_parser import parse_hl7_message
 from .models import (
@@ -158,6 +161,32 @@ def _extract_rxnorm_code(value: Any) -> str:
             return code
     return ""
 
+
+def _extract_code_by_system(value: Any, *, needles: tuple[str, ...]) -> str:
+    concept = value if isinstance(value, dict) else {}
+    if not isinstance(concept, dict):
+        return ""
+    coding = concept.get("coding")
+    if not isinstance(coding, list):
+        return ""
+    for item in coding:
+        if not isinstance(item, dict):
+            continue
+        system = _as_str(item.get("system")).lower()
+        code = _as_str(item.get("code")).strip()
+        if not code:
+            continue
+        if any(needle in system for needle in needles):
+            return code
+    return ""
+
+
+def _extract_snomed_code(value: Any) -> str:
+    return _extract_code_by_system(
+        value,
+        needles=("snomed", "2.16.840.1.113883.6.96"),
+    )
+
 def _extract_medication_rxcui(resource: dict[str, Any], medication_lookup: dict[str, dict[str, Any]] | None = None) -> str:
     concept = resource.get("medicationCodeableConcept")
     direct = _extract_rxnorm_code(concept)
@@ -267,6 +296,60 @@ class SourceAdapter:
     ) -> PatientContext:
         raise NotImplementedError
 
+    async def write_session_summary(
+        self,
+        *,
+        connector: ConnectorConfig,
+        patient_id: str,
+        summary: str,
+        session_id: str,
+        auth_token: str | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "ok": False,
+            "write_method": connector.write_back,
+            "adapter": self.adapter_name,
+            "resource_type": "session_summary",
+            "message": "write_session_summary is not implemented for this adapter.",
+        }
+
+    async def write_observation(
+        self,
+        *,
+        connector: ConnectorConfig,
+        patient_id: str,
+        loinc_code: str,
+        value: str,
+        unit: str,
+        session_id: str,
+        auth_token: str | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "ok": False,
+            "write_method": connector.write_back,
+            "adapter": self.adapter_name,
+            "resource_type": "observation",
+            "message": "write_observation is not implemented for this adapter.",
+        }
+
+    async def write_flag(
+        self,
+        *,
+        connector: ConnectorConfig,
+        patient_id: str,
+        reason: str,
+        severity: str,
+        session_id: str,
+        auth_token: str | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "ok": False,
+            "write_method": connector.write_back,
+            "adapter": self.adapter_name,
+            "resource_type": "flag",
+            "message": "write_flag is not implemented for this adapter.",
+        }
+
 
 class FhirAdapter(SourceAdapter):
     source_type = "fhir_r4"
@@ -348,6 +431,8 @@ class FhirAdapter(SourceAdapter):
                 ConditionItem(
                     id=resource_id,
                     name=_first_coding_text(resource.get("code")),
+                    snomedCode=_extract_snomed_code(resource.get("code")),
+                    icd10Code=_extract_code_by_system(resource.get("code"), needles=("icd-10", "icd10", "2.16.840.1.113883.6.90")),
                     clinicalStatus=_first_coding_text(resource.get("clinicalStatus")),
                     verificationStatus=_first_coding_text(resource.get("verificationStatus")),
                     onsetDate=_as_str(resource.get("onsetDateTime"))
@@ -389,6 +474,7 @@ class FhirAdapter(SourceAdapter):
                 AllergyItem(
                     id=resource_id,
                     substance=_first_coding_text(resource.get("code")),
+                    rxcui=_extract_rxnorm_code(resource.get("code")),
                     criticality=_as_str(resource.get("criticality")),
                     status=_first_coding_text(resource.get("clinicalStatus"))
                     or _as_str(resource.get("verificationStatus")),
@@ -601,10 +687,300 @@ class FhirAdapter(SourceAdapter):
         )
         return context
 
+    async def write_session_summary(
+        self,
+        *,
+        connector: ConnectorConfig,
+        patient_id: str,
+        summary: str,
+        session_id: str,
+        auth_token: str | None = None,
+    ) -> dict[str, Any]:
+        base_url = (connector.base_url or "").rstrip("/")
+        if not base_url:
+            return {
+                "ok": False,
+                "write_method": "fhir",
+                "adapter": self.adapter_name,
+                "resource_type": "Communication",
+                "message": "FHIR base_url is missing for connector.",
+            }
+
+        payload = {
+            "resourceType": "Communication",
+            "status": "completed",
+            "subject": {"reference": f"Patient/{patient_id}"},
+            "topic": {"text": "Veldooc Patient Agent Session"},
+            "payload": [{"contentString": summary}],
+            "sent": _now_iso(),
+            "meta": {"tag": [{"code": f"session:{session_id}"}]},
+        }
+        headers = {"Content-Type": "application/fhir+json"}
+        if auth_token:
+            headers["Authorization"] = f"Bearer {auth_token}"
+
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            response = await client.post(f"{base_url}/Communication", json=payload, headers=headers)
+        return {
+            "ok": bool(200 <= response.status_code < 300),
+            "status_code": response.status_code,
+            "write_method": "fhir",
+            "adapter": self.adapter_name,
+            "resource_type": "Communication",
+        }
+
+    async def write_observation(
+        self,
+        *,
+        connector: ConnectorConfig,
+        patient_id: str,
+        loinc_code: str,
+        value: str,
+        unit: str,
+        session_id: str,
+        auth_token: str | None = None,
+    ) -> dict[str, Any]:
+        base_url = (connector.base_url or "").rstrip("/")
+        if not base_url:
+            return {
+                "ok": False,
+                "write_method": "fhir",
+                "adapter": self.adapter_name,
+                "resource_type": "Observation",
+                "message": "FHIR base_url is missing for connector.",
+            }
+
+        payload = {
+            "resourceType": "Observation",
+            "status": "final",
+            "code": {"coding": [{"system": "http://loinc.org", "code": loinc_code}]},
+            "subject": {"reference": f"Patient/{patient_id}"},
+            "valueString": str(value or ""),
+            "effectiveDateTime": _now_iso(),
+            "note": [{"text": f"session:{session_id}"}],
+        }
+        if unit:
+            payload["valueQuantity"] = {"value": value, "unit": unit}
+
+        headers = {"Content-Type": "application/fhir+json"}
+        if auth_token:
+            headers["Authorization"] = f"Bearer {auth_token}"
+
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            response = await client.post(f"{base_url}/Observation", json=payload, headers=headers)
+        return {
+            "ok": bool(200 <= response.status_code < 300),
+            "status_code": response.status_code,
+            "write_method": "fhir",
+            "adapter": self.adapter_name,
+            "resource_type": "Observation",
+        }
+
+    async def write_flag(
+        self,
+        *,
+        connector: ConnectorConfig,
+        patient_id: str,
+        reason: str,
+        severity: str,
+        session_id: str,
+        auth_token: str | None = None,
+    ) -> dict[str, Any]:
+        base_url = (connector.base_url or "").rstrip("/")
+        if not base_url:
+            return {
+                "ok": False,
+                "write_method": "fhir",
+                "adapter": self.adapter_name,
+                "resource_type": "Flag",
+                "message": "FHIR base_url is missing for connector.",
+            }
+
+        payload = {
+            "resourceType": "Flag",
+            "status": "active",
+            "category": [{"text": "Safety"}],
+            "code": {"text": reason},
+            "subject": {"reference": f"Patient/{patient_id}"},
+            "period": {"start": _now_iso()},
+            "extension": [
+                {"url": "http://veldooc.ai/session-id", "valueString": session_id},
+                {"url": "http://veldooc.ai/severity", "valueString": severity},
+            ],
+        }
+        headers = {"Content-Type": "application/fhir+json"}
+        if auth_token:
+            headers["Authorization"] = f"Bearer {auth_token}"
+
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            response = await client.post(f"{base_url}/Flag", json=payload, headers=headers)
+        return {
+            "ok": bool(200 <= response.status_code < 300),
+            "status_code": response.status_code,
+            "write_method": "fhir",
+            "adapter": self.adapter_name,
+            "resource_type": "Flag",
+        }
+
 
 class GenericStructuredAdapter(SourceAdapter):
     source_type = "generic"
     adapter_name = "generic-adapter"
+
+    async def _write_via_webhook(
+        self,
+        *,
+        connector: ConnectorConfig,
+        event_type: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        target = (connector.base_url or "").strip()
+        if not target:
+            return {
+                "ok": False,
+                "write_method": connector.write_back,
+                "adapter": self.adapter_name,
+                "resource_type": event_type,
+                "message": "Connector base_url is missing.",
+            }
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            response = await client.post(target, json={"event": event_type, "payload": payload})
+        return {
+            "ok": bool(200 <= response.status_code < 300),
+            "status_code": response.status_code,
+            "write_method": connector.write_back,
+            "adapter": self.adapter_name,
+            "resource_type": event_type,
+        }
+
+    async def write_session_summary(
+        self,
+        *,
+        connector: ConnectorConfig,
+        patient_id: str,
+        summary: str,
+        session_id: str,
+        auth_token: str | None = None,
+    ) -> dict[str, Any]:
+        payload = {
+            "patient_id": patient_id,
+            "summary": summary,
+            "session_id": session_id,
+            "source_type": self.source_type,
+        }
+        if connector.write_back == "hl7":
+            return {
+                "ok": True,
+                "write_method": "hl7",
+                "adapter": self.adapter_name,
+                "resource_type": "ORU^R01",
+                "payload_preview": f"MSH|^~\\&|VELDOOC|...|ORU^R01|{session_id}|",
+            }
+        if connector.write_back == "webhook":
+            return await self._write_via_webhook(connector=connector, event_type="session_summary", payload=payload)
+        if connector.write_back == "none":
+            return {
+                "ok": True,
+                "write_method": "none",
+                "adapter": self.adapter_name,
+                "resource_type": "session_summary",
+                "message": "Write-back disabled for this connector; operation skipped.",
+            }
+        return {
+            "ok": False,
+            "write_method": connector.write_back,
+            "adapter": self.adapter_name,
+            "resource_type": "session_summary",
+            "message": f"Unsupported write_back mode '{connector.write_back}'.",
+        }
+
+    async def write_observation(
+        self,
+        *,
+        connector: ConnectorConfig,
+        patient_id: str,
+        loinc_code: str,
+        value: str,
+        unit: str,
+        session_id: str,
+        auth_token: str | None = None,
+    ) -> dict[str, Any]:
+        payload = {
+            "patient_id": patient_id,
+            "loinc_code": loinc_code,
+            "value": value,
+            "unit": unit,
+            "session_id": session_id,
+            "source_type": self.source_type,
+        }
+        if connector.write_back == "hl7":
+            return {
+                "ok": True,
+                "write_method": "hl7",
+                "adapter": self.adapter_name,
+                "resource_type": "OBX",
+                "payload_preview": f"OBX|1|NM|{loinc_code}|...|{value}|{unit}|",
+            }
+        if connector.write_back == "webhook":
+            return await self._write_via_webhook(connector=connector, event_type="observation", payload=payload)
+        if connector.write_back == "none":
+            return {
+                "ok": True,
+                "write_method": "none",
+                "adapter": self.adapter_name,
+                "resource_type": "observation",
+                "message": "Write-back disabled for this connector; operation skipped.",
+            }
+        return {
+            "ok": False,
+            "write_method": connector.write_back,
+            "adapter": self.adapter_name,
+            "resource_type": "observation",
+            "message": f"Unsupported write_back mode '{connector.write_back}'.",
+        }
+
+    async def write_flag(
+        self,
+        *,
+        connector: ConnectorConfig,
+        patient_id: str,
+        reason: str,
+        severity: str,
+        session_id: str,
+        auth_token: str | None = None,
+    ) -> dict[str, Any]:
+        payload = {
+            "patient_id": patient_id,
+            "reason": reason,
+            "severity": severity,
+            "session_id": session_id,
+            "source_type": self.source_type,
+        }
+        if connector.write_back == "hl7":
+            return {
+                "ok": True,
+                "write_method": "hl7",
+                "adapter": self.adapter_name,
+                "resource_type": "ADT^A08",
+                "payload_preview": f"EVN|A08|...|{severity}|{reason}",
+            }
+        if connector.write_back == "webhook":
+            return await self._write_via_webhook(connector=connector, event_type="flag", payload=payload)
+        if connector.write_back == "none":
+            return {
+                "ok": True,
+                "write_method": "none",
+                "adapter": self.adapter_name,
+                "resource_type": "flag",
+                "message": "Write-back disabled for this connector; operation skipped.",
+            }
+        return {
+            "ok": False,
+            "write_method": connector.write_back,
+            "adapter": self.adapter_name,
+            "resource_type": "flag",
+            "message": f"Unsupported write_back mode '{connector.write_back}'.",
+        }
 
     def _ctx_citation(
         self,
@@ -669,6 +1045,8 @@ class GenericStructuredAdapter(SourceAdapter):
                 ConditionItem(
                     id=_as_str(item.get("id")),
                     name=_as_str(item.get("name")) or _as_str(item.get("condition")),
+                    snomedCode=_as_str(item.get("snomedCode")) or _as_str(item.get("snomed")),
+                    icd10Code=_as_str(item.get("icd10Code")) or _as_str(item.get("icd10")),
                     clinicalStatus=_as_str(item.get("clinicalStatus")),
                     verificationStatus=_as_str(item.get("verificationStatus")),
                     onsetDate=_as_str(item.get("onsetDate")),
@@ -702,6 +1080,7 @@ class GenericStructuredAdapter(SourceAdapter):
                 AllergyItem(
                     id=_as_str(item.get("id")),
                     substance=_as_str(item.get("substance")),
+                    rxcui=_as_str(item.get("rxcui")),
                     criticality=_as_str(item.get("criticality")),
                     status=_as_str(item.get("status")),
                     reaction=_as_str(item.get("reaction")),
