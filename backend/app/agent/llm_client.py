@@ -237,7 +237,6 @@ async def call_medgemma(
         # We stream from backend->frontend ourselves. Using non-stream mode upstream
         # avoids long-lived HTTP chunk reads that are fragile over tunnels/proxies.
         "stream": False,
-        "response_format": {"type": "json_object"},
         "timeout": LLM_REQUEST_TIMEOUT_SEC,
     }
     try:
@@ -248,15 +247,37 @@ async def call_medgemma(
             first = choices[0]
             message = getattr(first, "message", None)
             content = getattr(message, "content", "") or ""
+            if isinstance(content, list):
+                parts = []
+                for item in content:
+                    if isinstance(item, dict):
+                        text_part = item.get("text")
+                        if isinstance(text_part, str) and text_part.strip():
+                            parts.append(text_part.strip())
+                content = " ".join(parts).strip()
+            if not content and message is not None:
+                refusal = getattr(message, "refusal", None)
+                if isinstance(refusal, str) and refusal.strip():
+                    content = refusal.strip()
+            if not content:
+                dumped = getattr(first, "model_dump", None)
+                if callable(dumped):
+                    try:
+                        fragments = _extract_text_fragments(dumped())
+                        content = " ".join(dict.fromkeys(fragments)).strip()
+                    except Exception:  # noqa: BLE001
+                        pass
         if not isinstance(content, str):
             content = str(content or "")
+        if not content.strip():
+            content = "I am having trouble generating a response right now. Please try again in a few seconds."
         return _single_chunk_stream(content)
     except Exception as exc:  # noqa: BLE001
         status = _status_code_from_exception(exc)
         # Some external MedGemma gateways return non-OpenAI payloads even with
         # HTTP 200, which the OpenAI SDK rejects during parsing. In that case
         # status may be None, so we still attempt legacy fallback.
-        if status in {400, 404, 415, 422} or status is None:
+        if status in {400, 404, 415, 422, 500, 502, 503, 504} or status is None:
             logger.warning(
                 "OpenAI chat/completions incompatible for %s (status=%s, error=%r). Trying legacy /chat fallback.",
                 MEDGEMMA_BASE_URL,

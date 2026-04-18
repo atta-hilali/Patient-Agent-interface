@@ -85,7 +85,10 @@ async def medgemma_node(state: AgentState) -> dict:
     raw = (full or "").strip()
     if not raw:
         logger.warning("MedGemma returned an empty output stream.")
-        return {"escalation_flag": True, "escalation_reason": "empty_llm_output"}
+        return {
+            "draft_response": "I am having trouble generating a response right now. Please try again in a few seconds.",
+            "raw_citations": [],
+        }
 
     try:
         parsed = json.loads(raw)
