@@ -226,6 +226,71 @@ def _extract_openai_message_text(payload: object) -> str:
     return ""
 
 
+def _content_to_text(content: object) -> str:
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, dict):
+                text = item.get("text")
+                if isinstance(text, str) and text.strip():
+                    parts.append(text.strip())
+            elif isinstance(item, str) and item.strip():
+                parts.append(item.strip())
+        return " ".join(parts).strip()
+    return str(content or "").strip()
+
+
+def _normalize_chat_messages(messages: list[dict]) -> list[dict]:
+    # Some model servers enforce strict alternating turns and fail on patterns
+    # like user,user or multiple system messages. We merge consecutive roles and
+    # fold all system directives into a single leading system message.
+    prepared: list[dict] = []
+    for item in messages:
+        if not isinstance(item, dict):
+            continue
+        role = str(item.get("role") or "user").strip().lower()
+        if role not in {"system", "user", "assistant"}:
+            role = "user"
+        text = _content_to_text(item.get("content"))
+        if not text:
+            continue
+        if prepared and prepared[-1]["role"] == role:
+            prepared[-1]["content"] = f"{prepared[-1]['content']}\n\n{text}"
+        else:
+            prepared.append({"role": role, "content": text})
+
+    if not prepared:
+        return [{"role": "user", "content": "Hello"}]
+
+    system_parts: list[str] = []
+    turns: list[dict] = []
+    for item in prepared:
+        if item["role"] == "system":
+            system_parts.append(item["content"])
+        else:
+            turns.append(item)
+
+    normalized: list[dict] = []
+    if system_parts:
+        normalized.append({"role": "system", "content": "\n\n".join(system_parts)})
+    normalized.extend(turns)
+
+    if len(normalized) == 1 and normalized[0]["role"] == "system":
+        return [normalized[0], {"role": "user", "content": "Please continue."}]
+
+    if normalized and normalized[0]["role"] == "assistant":
+        normalized[0]["role"] = "user"
+
+    return normalized
+
+
+def _build_messages_with_system(system_prompt: str, messages: list) -> list[dict]:
+    raw = [{"role": "system", "content": system_prompt}, *_serialize_messages(messages)]
+    return _normalize_chat_messages(raw)
+
+
 def _extract_completion_content(response: object) -> str:
     if isinstance(response, str):
         return response.strip()
@@ -306,7 +371,7 @@ def _extract_tool_calls_from_text(content: str) -> list[dict]:
 
 
 async def _call_legacy_chat(system_prompt: str, messages: list, model_id: str) -> AsyncIterator[_LegacyChunk]:
-    serialized_messages = [{"role": "system", "content": system_prompt}, *_serialize_messages(messages)]
+    serialized_messages = _build_messages_with_system(system_prompt, messages)
     openai_payload = {
         "model": model_id,
         "messages": serialized_messages,
@@ -367,7 +432,7 @@ async def call_medgemma(
     model_id = await _resolve_model_id()
     payload = {
         "model": model_id,
-        "messages": [{"role": "system", "content": system_prompt}] + _serialize_messages(messages),
+        "messages": _build_messages_with_system(system_prompt, messages),
         "temperature": 0.1,
         "max_tokens": CHAT_MAX_TOKENS,
         # We stream from backend->frontend ourselves. Using non-stream mode upstream
@@ -414,7 +479,9 @@ async def call_medgemma_intent(prompt: str, question: str) -> str:
         response = await _with_retry(
             lambda: VLLM.chat.completions.create(
                 model=model_id,
-                messages=[{"role": "system", "content": prompt}, {"role": "user", "content": question}],
+                messages=_normalize_chat_messages(
+                    [{"role": "system", "content": prompt}, {"role": "user", "content": question}]
+                ),
                 temperature=0.1,
                 max_tokens=8,
                 timeout=LLM_REQUEST_TIMEOUT_SEC,
@@ -436,15 +503,18 @@ async def call_medgemma_tool_planner(system_prompt: str, messages: list, tool_ca
     model_id = await _resolve_model_id()
     catalog_json = json.dumps(tool_catalog, ensure_ascii=True)
     try:
+        planner_messages = _normalize_chat_messages(
+            [
+                {"role": "system", "content": TOOL_PLANNER_PROMPT},
+                {"role": "system", "content": f"Clinical context:\n{system_prompt}"},
+                {"role": "system", "content": f"Available tools:\n{catalog_json}"},
+                *_serialize_messages(messages),
+            ]
+        )
         response = await _with_retry(
             lambda: VLLM.chat.completions.create(
                 model=model_id,
-                messages=[
-                    {"role": "system", "content": TOOL_PLANNER_PROMPT},
-                    {"role": "system", "content": f"Clinical context:\n{system_prompt}"},
-                    {"role": "system", "content": f"Available tools:\n{catalog_json}"},
-                    *_serialize_messages(messages),
-                ],
+                messages=planner_messages,
                 temperature=0.1,
                 max_tokens=512,
                 timeout=LLM_REQUEST_TIMEOUT_SEC,

@@ -2,9 +2,6 @@
 import json
 import logging
 
-# from langchain_core.messages import HumanMessage
-from langchain_core.messages import HumanMessage
-
 # from app.agent.llm_client import call_medgemma
 from app.agent.llm_client import call_medgemma
 # from app.agent.state import AgentState
@@ -68,7 +65,7 @@ async def medgemma_node(state: AgentState) -> dict:
     messages = list(state["messages"])
     if state.get("tool_results"):
         tool_text = "\n".join(f"[{name} result]\n{value}" for name, value in state["tool_results"].items())
-        messages.append(HumanMessage(content=f"Tool data:\n{tool_text}"))
+        system_prompt = f"{system_prompt}\n\nTool data:\n{tool_text}"
 
     full = ""
     try:
