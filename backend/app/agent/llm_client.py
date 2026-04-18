@@ -22,6 +22,8 @@ MEDGEMMA_MODE = (_settings.medgemma_mode or "mvp").lower()
 MVP_MODEL = _settings.medgemma_mvp_model or "google/medgemma-4b-it"
 SPRINT3_MODEL = _settings.medgemma_sprint3_model or "google/medgemma-27b-it"
 MAX_TOKENS = int(_settings.medgemma_max_tokens or 1024)
+CHAT_MAX_TOKENS = max(64, min(MAX_TOKENS, 256))
+LLM_REQUEST_TIMEOUT_SEC = float(max(10, min(180, int(os.getenv("LLM_REQUEST_TIMEOUT_SEC", "75")))))
 DEFAULT_MODEL = SPRINT3_MODEL if MEDGEMMA_MODE in {"27b", "sprint3", "production"} else MVP_MODEL
 VLLM = AsyncOpenAI(base_url=MEDGEMMA_BASE_URL, api_key=MEDGEMMA_API_KEY)
 _latencies_ms: deque[float] = deque(maxlen=200)
@@ -200,7 +202,7 @@ async def _resolve_model_id() -> str:
 async def _call_legacy_chat(system_prompt: str, messages: list) -> AsyncIterator[_LegacyChunk]:
     payload = {
         "messages": [{"role": "system", "content": system_prompt}, *_serialize_messages(messages)],
-        "max_new_tokens": MAX_TOKENS,
+        "max_new_tokens": CHAT_MAX_TOKENS,
         "temperature": 0.1,
         "top_p": 0.9,
         "top_k": 50,
@@ -208,7 +210,7 @@ async def _call_legacy_chat(system_prompt: str, messages: list) -> AsyncIterator
         "stream": False,
     }
     endpoint = f"{MEDGEMMA_BASE_URL.rstrip('/')}/chat"
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    async with httpx.AsyncClient(timeout=LLM_REQUEST_TIMEOUT_SEC) as client:
         response = await client.post(endpoint, json=payload)
         response.raise_for_status()
         data = response.json()
@@ -231,9 +233,10 @@ async def call_medgemma(
         "messages": [{"role": "system", "content": system_prompt}] + _serialize_messages(messages),
         "tools": tools,
         "temperature": 0.1,
-        "max_tokens": MAX_TOKENS,
+        "max_tokens": CHAT_MAX_TOKENS,
         "stream": True,
         "response_format": {"type": "json_object"},
+        "timeout": LLM_REQUEST_TIMEOUT_SEC,
     }
     try:
         return await _with_retry(lambda: VLLM.chat.completions.create(**payload))
@@ -269,6 +272,7 @@ async def call_medgemma_intent(prompt: str, question: str) -> str:
                 messages=[{"role": "system", "content": prompt}, {"role": "user", "content": question}],
                 temperature=0.0,
                 max_tokens=3,
+                timeout=LLM_REQUEST_TIMEOUT_SEC,
             )
         )
         return response.choices[0].message.content or "tools"
@@ -292,6 +296,7 @@ async def call_medgemma_tool_planner(system_prompt: str, messages: list, tool_ca
                 temperature=0.0,
                 max_tokens=512,
                 response_format={"type": "json_object"},
+                timeout=LLM_REQUEST_TIMEOUT_SEC,
             )
         )
     except Exception:  # noqa: BLE001
@@ -322,6 +327,7 @@ async def call_medgemma_vision(prompt: str, image_b64: str) -> str:
                 ],
                 temperature=0.1,
                 max_tokens=512,
+                timeout=LLM_REQUEST_TIMEOUT_SEC,
             )
         )
         return response.choices[0].message.content or ""

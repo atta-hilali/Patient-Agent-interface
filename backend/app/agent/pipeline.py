@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import os
 import re
 from pathlib import Path
 
@@ -41,6 +43,17 @@ _history: dict[str, list] = {}
 _history_summaries: dict[str, str] = {}
 _connector_store: ConnectorStore | None = None
 logger = logging.getLogger(__name__)
+
+
+def _parse_turn_timeout(raw: str | None, default: float = 90.0) -> float:
+    try:
+        value = float(raw) if raw is not None else default
+    except (TypeError, ValueError):
+        value = default
+    return max(15.0, value)
+
+
+AGENT_TURN_TIMEOUT_SEC = _parse_turn_timeout(os.getenv("AGENT_TURN_TIMEOUT_SEC"), 90.0)
 
 # Input safety should only hard-stop on clearly critical categories.
 # Less-critical moderation categories can continue and will still be checked
@@ -278,7 +291,20 @@ async def run_agent_turn(inp: PatientInput, token: AuthToken):
         "ai_disabled": False,
     }
 
-    final_state = await agent_graph.ainvoke(initial_state)
+    try:
+        final_state = await asyncio.wait_for(agent_graph.ainvoke(initial_state), timeout=AGENT_TURN_TIMEOUT_SEC)
+    except asyncio.TimeoutError:
+        logger.error(
+            "Agent turn timed out after %.1fs (session=%s).",
+            AGENT_TURN_TIMEOUT_SEC,
+            session_id,
+        )
+        yield {
+            "type": "error",
+            "text": "Agent response timed out. Please retry with a shorter question.",
+            "turn_complete": True,
+        }
+        return
     safety_result = final_state.get("safety_result") or {}
     logger.info(
         "Agent turn completed state session=%s intent=%s safety_route=%s blocked_by=%s escalation=%s draft_len=%s",
