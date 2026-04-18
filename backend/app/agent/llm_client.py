@@ -234,12 +234,23 @@ async def call_medgemma(
         "tools": tools,
         "temperature": 0.1,
         "max_tokens": CHAT_MAX_TOKENS,
-        "stream": True,
+        # We stream from backend->frontend ourselves. Using non-stream mode upstream
+        # avoids long-lived HTTP chunk reads that are fragile over tunnels/proxies.
+        "stream": False,
         "response_format": {"type": "json_object"},
         "timeout": LLM_REQUEST_TIMEOUT_SEC,
     }
     try:
-        return await _with_retry(lambda: VLLM.chat.completions.create(**payload))
+        response = await _with_retry(lambda: VLLM.chat.completions.create(**payload))
+        content = ""
+        choices = getattr(response, "choices", None)
+        if isinstance(choices, list) and choices:
+            first = choices[0]
+            message = getattr(first, "message", None)
+            content = getattr(message, "content", "") or ""
+        if not isinstance(content, str):
+            content = str(content or "")
+        return _single_chunk_stream(content)
     except Exception as exc:  # noqa: BLE001
         status = _status_code_from_exception(exc)
         # Some external MedGemma gateways return non-OpenAI payloads even with

@@ -71,9 +71,16 @@ async def medgemma_node(state: AgentState) -> dict:
         messages.append(HumanMessage(content=f"Tool data:\n{tool_text}"))
 
     full = ""
-    stream = await call_medgemma(system_prompt, messages)
-    async for chunk in stream:
-        full += _extract_chunk_text(chunk)
+    try:
+        stream = await call_medgemma(system_prompt, messages)
+        async for chunk in stream:
+            full += _extract_chunk_text(chunk)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("MedGemma call failed, returning fallback message: %r", exc)
+        return {
+            "draft_response": "I am having trouble reaching the clinical model right now. Please try again in a few seconds.",
+            "raw_citations": [],
+        }
 
     raw = (full or "").strip()
     if not raw:
