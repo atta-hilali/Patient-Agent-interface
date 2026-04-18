@@ -226,6 +226,85 @@ def _extract_openai_message_text(payload: object) -> str:
     return ""
 
 
+def _extract_completion_content(response: object) -> str:
+    if isinstance(response, str):
+        return response.strip()
+    if isinstance(response, bytes):
+        return response.decode("utf-8", errors="ignore").strip()
+
+    if isinstance(response, dict):
+        text = _extract_openai_message_text(response)
+        if text:
+            return text
+        fragments = _extract_text_fragments(response)
+        if fragments:
+            return " ".join(dict.fromkeys(fragments)).strip()
+        return json.dumps(response, ensure_ascii=False).strip()
+
+    choices = getattr(response, "choices", None)
+    if isinstance(choices, list) and choices:
+        first = choices[0]
+        message = getattr(first, "message", None)
+        if message is not None:
+            content = getattr(message, "content", None)
+            if isinstance(content, str) and content.strip():
+                return content.strip()
+            if isinstance(content, list):
+                parts: list[str] = []
+                for item in content:
+                    if isinstance(item, dict):
+                        text = item.get("text")
+                        if isinstance(text, str) and text.strip():
+                            parts.append(text.strip())
+                if parts:
+                    return " ".join(parts).strip()
+
+    dumped = getattr(response, "model_dump", None)
+    if callable(dumped):
+        try:
+            return _extract_completion_content(dumped())
+        except Exception:  # noqa: BLE001
+            return ""
+    return ""
+
+
+def _extract_tool_calls_from_text(content: str) -> list[dict]:
+    raw = (content or "").strip()
+    if not raw:
+        return []
+
+    # Remove markdown fences if present.
+    if raw.startswith("```"):
+        raw = re.sub(r"^```(?:json)?\s*", "", raw, flags=re.IGNORECASE)
+        raw = re.sub(r"\s*```$", "", raw)
+
+    candidates: list[str] = [raw]
+
+    start = raw.find("{")
+    end = raw.rfind("}")
+    if start >= 0 and end > start:
+        candidates.append(raw[start : end + 1])
+
+    for candidate in candidates:
+        try:
+            parsed = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+
+        if isinstance(parsed, dict):
+            tool_calls = parsed.get("tool_calls", [])
+            if isinstance(tool_calls, list):
+                return tool_calls
+
+            # Some model servers wrap content in {"content":"{...json...}"}.
+            nested = parsed.get("content")
+            if isinstance(nested, str):
+                nested_calls = _extract_tool_calls_from_text(nested)
+                if nested_calls:
+                    return nested_calls
+    return []
+
+
 async def _call_legacy_chat(system_prompt: str, messages: list, model_id: str) -> AsyncIterator[_LegacyChunk]:
     serialized_messages = [{"role": "system", "content": system_prompt}, *_serialize_messages(messages)]
     openai_payload = {
@@ -300,32 +379,7 @@ async def call_medgemma(
         payload["tools"] = tools
     try:
         response = await _with_retry(lambda: VLLM.chat.completions.create(**payload))
-        content = ""
-        choices = getattr(response, "choices", None)
-        if isinstance(choices, list) and choices:
-            first = choices[0]
-            message = getattr(first, "message", None)
-            content = getattr(message, "content", "") or ""
-            if isinstance(content, list):
-                parts = []
-                for item in content:
-                    if isinstance(item, dict):
-                        text_part = item.get("text")
-                        if isinstance(text_part, str) and text_part.strip():
-                            parts.append(text_part.strip())
-                content = " ".join(parts).strip()
-            if not content and message is not None:
-                refusal = getattr(message, "refusal", None)
-                if isinstance(refusal, str) and refusal.strip():
-                    content = refusal.strip()
-            if not content:
-                dumped = getattr(first, "model_dump", None)
-                if callable(dumped):
-                    try:
-                        fragments = _extract_text_fragments(dumped())
-                        content = " ".join(dict.fromkeys(fragments)).strip()
-                    except Exception:  # noqa: BLE001
-                        pass
+        content = _extract_completion_content(response)
         if not isinstance(content, str):
             content = str(content or "")
         if not content.strip():
@@ -366,7 +420,14 @@ async def call_medgemma_intent(prompt: str, question: str) -> str:
                 timeout=LLM_REQUEST_TIMEOUT_SEC,
             )
         )
-        return response.choices[0].message.content or "tools"
+        text = _extract_completion_content(response).strip().lower()
+        if text in {"direct", "tools", "escalate"}:
+            return text
+        if "escalate" in text:
+            return "escalate"
+        if "direct" in text:
+            return "direct"
+        return "tools"
     except Exception:  # noqa: BLE001
         return "tools"
 
@@ -391,13 +452,8 @@ async def call_medgemma_tool_planner(system_prompt: str, messages: list, tool_ca
         )
     except Exception:  # noqa: BLE001
         return []
-    content = response.choices[0].message.content or '{"tool_calls":[]}'
-    try:
-        parsed = json.loads(content)
-    except json.JSONDecodeError:
-        return []
-    tool_calls = parsed.get("tool_calls", [])
-    return tool_calls if isinstance(tool_calls, list) else []
+    content = _extract_completion_content(response)
+    return _extract_tool_calls_from_text(content)
 
 
 async def call_medgemma_vision(prompt: str, image_b64: str) -> str:
@@ -420,7 +476,7 @@ async def call_medgemma_vision(prompt: str, image_b64: str) -> str:
                 timeout=LLM_REQUEST_TIMEOUT_SEC,
             )
         )
-        return response.choices[0].message.content or ""
+        return _extract_completion_content(response)
     except Exception:  # noqa: BLE001
         return ""
 
