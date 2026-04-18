@@ -1,8 +1,9 @@
-# import json
+import asyncio
 import json
 import logging
 # from base64 import b64encode
 from base64 import b64encode
+from contextlib import suppress
 
 # from fastapi import APIRouter, Cookie, HTTPException, Request, UploadFile
 from fastapi import APIRouter, Cookie, HTTPException, Request, UploadFile
@@ -114,22 +115,47 @@ async def agent_chat(request: Request, session_id: str = Cookie(default=None)):
 
     # async def sse_stream():
     async def sse_stream():
+        queue: asyncio.Queue[tuple[str, dict | None]] = asyncio.Queue()
+
+        async def producer() -> None:
+            try:
+                # async for event in run_agent_turn(payload, token):
+                async for event in run_agent_turn(payload, token):
+                    # data = event if isinstance(event, dict) else event.model_dump()
+                    data = event if isinstance(event, dict) else event.model_dump()
+                    await queue.put(("event", data))
+            except HTTPException as exc:
+                logger.warning("Agent stream HTTPException: %s", exc.detail)
+                error_event = {"type": "error", "text": exc.detail or str(exc), "turn_complete": True}
+                await queue.put(("event", error_event))
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("Agent stream failed unexpectedly.")
+                error_event = {"type": "error", "text": f"Agent failed: {exc}", "turn_complete": True}
+                await queue.put(("event", error_event))
+            finally:
+                await queue.put(("done", None))
+
+        producer_task = asyncio.create_task(producer())
         try:
-            # async for event in run_agent_turn(payload, token):
-            async for event in run_agent_turn(payload, token):
-                # data = event if isinstance(event, dict) else event.model_dump()
-                data = event if isinstance(event, dict) else event.model_dump()
-                # yield f"data: {json.dumps(data)}\n\n"
-                yield f"data: {json.dumps(data)}\n\n"
-        except HTTPException as exc:
-            logger.warning("Agent stream HTTPException: %s", exc.detail)
-            error_event = {"type": "error", "text": exc.detail or str(exc), "turn_complete": True}
-            yield f"data: {json.dumps(error_event)}\n\n"
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("Agent stream failed unexpectedly.")
-            error_event = {"type": "error", "text": f"Agent failed: {exc}", "turn_complete": True}
-            yield f"data: {json.dumps(error_event)}\n\n"
+            while True:
+                try:
+                    item_type, payload_data = await asyncio.wait_for(queue.get(), timeout=10.0)
+                except asyncio.TimeoutError:
+                    # Keep SSE connections alive during long model/tool phases so
+                    # reverse proxies/tunnels do not drop idle streams.
+                    yield ": keepalive\n\n"
+                    continue
+
+                if item_type == "event" and payload_data is not None:
+                    yield f"data: {json.dumps(payload_data)}\n\n"
+                    continue
+                if item_type == "done":
+                    break
         finally:
+            if not producer_task.done():
+                producer_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await producer_task
             # yield "data: [DONE]\n\n"
             yield "data: [DONE]\n\n"
 
@@ -140,6 +166,10 @@ async def agent_chat(request: Request, session_id: str = Cookie(default=None)):
         # media_type="text/event-stream",
         media_type="text/event-stream",
         # headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     # )
     )

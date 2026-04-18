@@ -540,7 +540,10 @@ function initChatFlow() {
       speakText(result.text);
       if (pendingImageBase64) showToast(`Image "${pendingImageName || 'upload'}" sent with message.`);
     } catch (error) {
-      const errorText = error?.message || 'Agent streaming failed.';
+      const rawErrorText = (error?.message || '').trim();
+      const errorText = /failed to fetch/i.test(rawErrorText)
+        ? 'Connection to backend was interrupted. Verify backend/tunnel is running, then retry.'
+        : (rawErrorText || 'Agent streaming failed.');
       streamUi.bubble.textContent = errorText;
       streamUi.source.innerHTML = '<span class="msg-source-icon">*</span>Agent error';
       showToast(errorText);
