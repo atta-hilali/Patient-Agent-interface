@@ -199,9 +199,44 @@ async def _resolve_model_id() -> str:
     return _resolved_model_id
 
 
-async def _call_legacy_chat(system_prompt: str, messages: list) -> AsyncIterator[_LegacyChunk]:
-    payload = {
-        "messages": [{"role": "system", "content": system_prompt}, *_serialize_messages(messages)],
+def _extract_openai_message_text(payload: object) -> str:
+    if not isinstance(payload, dict):
+        return ""
+    choices = payload.get("choices")
+    if not isinstance(choices, list) or not choices:
+        return ""
+    first = choices[0]
+    if not isinstance(first, dict):
+        return ""
+    message = first.get("message")
+    if not isinstance(message, dict):
+        return ""
+    content = message.get("content")
+    if isinstance(content, str) and content.strip():
+        return content.strip()
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if not isinstance(item, dict):
+                continue
+            text = item.get("text")
+            if isinstance(text, str) and text.strip():
+                parts.append(text.strip())
+        return " ".join(parts).strip()
+    return ""
+
+
+async def _call_legacy_chat(system_prompt: str, messages: list, model_id: str) -> AsyncIterator[_LegacyChunk]:
+    serialized_messages = [{"role": "system", "content": system_prompt}, *_serialize_messages(messages)]
+    openai_payload = {
+        "model": model_id,
+        "messages": serialized_messages,
+        "max_tokens": CHAT_MAX_TOKENS,
+        "temperature": 0.1,
+        "stream": False,
+    }
+    legacy_payload = {
+        "messages": serialized_messages,
         "max_new_tokens": CHAT_MAX_TOKENS,
         "temperature": 0.1,
         "top_p": 0.9,
@@ -209,17 +244,40 @@ async def _call_legacy_chat(system_prompt: str, messages: list) -> AsyncIterator
         "repetition_penalty": 1.1,
         "stream": False,
     }
-    endpoint = f"{MEDGEMMA_BASE_URL.rstrip('/')}/chat"
-    async with httpx.AsyncClient(timeout=LLM_REQUEST_TIMEOUT_SEC) as client:
-        response = await client.post(endpoint, json=payload)
-        response.raise_for_status()
-        data = response.json()
 
-    parts = _extract_text_fragments(data)
-    text = " ".join(dict.fromkeys(parts)).strip()
-    if not text:
-        text = json.dumps(data, ensure_ascii=False)
-    return _single_chunk_stream(text)
+    attempts = [
+        (f"{MEDGEMMA_BASE_URL.rstrip('/')}/chat/completions", openai_payload),
+        (f"{MEDGEMMA_BASE_URL.rstrip('/')}/chat", legacy_payload),
+    ]
+    last_error: Exception | None = None
+
+    async with httpx.AsyncClient(timeout=LLM_REQUEST_TIMEOUT_SEC) as client:
+        for endpoint, payload in attempts:
+            try:
+                response = await client.post(endpoint, json=payload)
+                response.raise_for_status()
+                data = response.json()
+            except httpx.HTTPStatusError as exc:
+                last_error = exc
+                status = exc.response.status_code if exc.response is not None else None
+                if status in {404, 405, 415, 422}:
+                    continue
+                raise
+            except Exception as exc:  # noqa: BLE001
+                last_error = exc
+                continue
+
+            text = _extract_openai_message_text(data)
+            if not text:
+                parts = _extract_text_fragments(data)
+                text = " ".join(dict.fromkeys(parts)).strip()
+            if not text:
+                text = json.dumps(data, ensure_ascii=False)
+            return _single_chunk_stream(text)
+
+    if last_error:
+        raise last_error
+    raise RuntimeError("No compatible MedGemma chat endpoint was available.")
 
 
 async def call_medgemma(
@@ -231,7 +289,6 @@ async def call_medgemma(
     payload = {
         "model": model_id,
         "messages": [{"role": "system", "content": system_prompt}] + _serialize_messages(messages),
-        "tools": tools,
         "temperature": 0.1,
         "max_tokens": CHAT_MAX_TOKENS,
         # We stream from backend->frontend ourselves. Using non-stream mode upstream
@@ -239,6 +296,8 @@ async def call_medgemma(
         "stream": False,
         "timeout": LLM_REQUEST_TIMEOUT_SEC,
     }
+    if tools:
+        payload["tools"] = tools
     try:
         response = await _with_retry(lambda: VLLM.chat.completions.create(**payload))
         content = ""
@@ -285,7 +344,7 @@ async def call_medgemma(
                 exc,
             )
             try:
-                return await _call_legacy_chat(system_prompt, messages)
+                return await _call_legacy_chat(system_prompt, messages, model_id)
             except Exception as fallback_exc:  # noqa: BLE001
                 logger.error(
                     "Legacy /chat fallback also failed for %s: %r",
@@ -302,8 +361,8 @@ async def call_medgemma_intent(prompt: str, question: str) -> str:
             lambda: VLLM.chat.completions.create(
                 model=model_id,
                 messages=[{"role": "system", "content": prompt}, {"role": "user", "content": question}],
-                temperature=0.0,
-                max_tokens=3,
+                temperature=0.1,
+                max_tokens=8,
                 timeout=LLM_REQUEST_TIMEOUT_SEC,
             )
         )
@@ -325,9 +384,8 @@ async def call_medgemma_tool_planner(system_prompt: str, messages: list, tool_ca
                     {"role": "system", "content": f"Available tools:\n{catalog_json}"},
                     *_serialize_messages(messages),
                 ],
-                temperature=0.0,
+                temperature=0.1,
                 max_tokens=512,
-                response_format={"type": "json_object"},
                 timeout=LLM_REQUEST_TIMEOUT_SEC,
             )
         )
