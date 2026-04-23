@@ -7,7 +7,7 @@ const EPIC_CONFIG = Object.freeze({
   // hybrid  = try backend first, fallback to browser
   authMode: 'backend',
   // Python backend base URL (FastAPI). Keep same-origin if using reverse proxy.
-  backendBaseUrl: 'https://eight-consent-oval-accomplish.trycloudflare.com',
+  backendBaseUrl: 'https://curious-span-title-marc.trycloudflare.com',
   // Voice input mode:
   // websocket = stream PCM to /ws/audio/{session_id} (production-like path)
   // http      = record chunk then POST /voice/transcribe (fallback)
